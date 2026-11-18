@@ -1,102 +1,125 @@
 import * as THREE from 'three'
+import { texture } from './textures'
 
-const ACCENT = new THREE.Color('#5eead4')
+export const PLAYER_RADIUS = 0.35
 
-export const PLAYER_RADIUS = 0.55
+function material(name: string) {
+  return new THREE.MeshLambertMaterial({ map: texture(name) })
+}
+
+function part(w: number, h: number, d: number, materials: THREE.Material | THREE.Material[]) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), materials)
+  mesh.castShadow = true
+  return mesh
+}
 
 export class Player {
   readonly root = new THREE.Group()
   private body = new THREE.Group()
-  private legs: THREE.Mesh[] = []
-  private arms: THREE.Mesh[] = []
-  private halo: THREE.Mesh
-  private visor: THREE.MeshStandardMaterial
+  private legs: THREE.Group[] = []
+  private arms: THREE.Group[] = []
   private stride = 0
-  private heading = 0
+  private reachAmount = 0
+  private headingValue = 0
 
   constructor() {
-    const shell = new THREE.MeshStandardMaterial({ color: '#dbe7ff', roughness: 0.35, metalness: 0.25 })
-    const dark = new THREE.MeshStandardMaterial({ color: '#33476f', roughness: 0.55, metalness: 0.35 })
-    this.visor = new THREE.MeshStandardMaterial({ color: ACCENT, emissive: ACCENT, emissiveIntensity: 2.2 })
+    const skin = new THREE.MeshLambertMaterial({ color: '#efc29a' })
+    const jacket = material('jacket')
+    const sleeve = material('sleeve')
+    const pants = material('pants')
+    const hair = material('hair')
 
-    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.42, 0.55, 6, 16), shell)
-    torso.position.y = 1.25
-    const belt = new THREE.Mesh(new THREE.TorusGeometry(0.43, 0.05, 8, 32), this.visor)
-    belt.rotation.x = Math.PI / 2
-    belt.position.y = 1.02
-
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.36, 24, 16), shell)
-    head.position.y = 2.15
-    const visor = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.36, 4, 12), this.visor)
-    visor.rotation.z = Math.PI / 2
-    visor.position.set(0, 2.18, 0.31)
-
-    const pack = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.55, 0.22), dark)
-    pack.position.set(0, 1.35, -0.42)
-    const antenna = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 8), this.visor)
-    antenna.position.set(0.18, 1.72, -0.48)
-
-    this.body.add(torso, belt, head, visor, pack, antenna)
-
-    const legGeometry = new THREE.CapsuleGeometry(0.13, 0.42, 4, 10)
-    legGeometry.translate(0, -0.34, 0)
     for (const side of [-1, 1]) {
-      const leg = new THREE.Mesh(legGeometry, dark)
-      leg.position.set(side * 0.2, 0.78, 0)
-      this.legs.push(leg)
-      this.body.add(leg)
+      const hip = new THREE.Group()
+      hip.position.set(side * 0.14, 0.62, 0)
+      const leg = part(0.26, 0.62, 0.28, pants)
+      leg.position.y = -0.31
+      hip.add(leg)
+      this.legs.push(hip)
+      this.body.add(hip)
     }
 
-    const armGeometry = new THREE.CapsuleGeometry(0.1, 0.4, 4, 10)
-    armGeometry.translate(0, -0.3, 0)
+    const torso = part(0.58, 0.7, 0.34, [jacket, jacket, jacket, jacket, jacket, material('pack')])
+    torso.position.y = 0.97
+    const pack = part(0.44, 0.5, 0.2, material('pack'))
+    pack.position.set(0, 1.0, -0.27)
+    this.body.add(torso, pack)
+
     for (const side of [-1, 1]) {
-      const arm = new THREE.Mesh(armGeometry, shell)
-      arm.position.set(side * 0.52, 1.55, 0)
-      arm.rotation.z = side * 0.12
-      this.arms.push(arm)
-      this.body.add(arm)
+      const shoulder = new THREE.Group()
+      shoulder.position.set(side * 0.41, 1.3, 0)
+      const arm = part(0.24, 0.68, 0.26, [sleeve, sleeve, jacket, skin, sleeve, sleeve])
+      arm.position.y = -0.3
+      shoulder.add(arm)
+      this.arms.push(shoulder)
+      this.body.add(shoulder)
     }
 
-    this.halo = new THREE.Mesh(
-      new THREE.RingGeometry(0.55, 0.75, 40),
-      new THREE.MeshBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.6, side: THREE.DoubleSide }),
+    const head = part(0.56, 0.56, 0.56, [
+      material('headSide'),
+      material('headSide'),
+      hair,
+      skin,
+      material('face'),
+      material('headBack'),
+    ])
+    head.position.y = 1.6
+    this.body.add(head)
+
+    const shadow = new THREE.Mesh(
+      new THREE.CircleGeometry(0.42, 24),
+      new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.18, depthWrite: false }),
     )
-    this.halo.rotation.x = -Math.PI / 2
-    this.halo.position.y = 0.03
+    shadow.rotation.x = -Math.PI / 2
+    shadow.position.y = 0.02
 
-    this.root.add(this.body, this.halo)
+    this.root.add(this.body, shadow)
   }
 
   get position() {
     return this.root.position
   }
 
-  faceTowards(direction: THREE.Vector3, dt: number) {
+  get heading() {
+    return this.headingValue
+  }
+
+  set heading(value: number) {
+    this.headingValue = Math.atan2(Math.sin(value), Math.cos(value))
+    this.root.rotation.y = this.headingValue
+  }
+
+  get forward() {
+    return new THREE.Vector3(Math.sin(this.headingValue), 0, Math.cos(this.headingValue))
+  }
+
+  turnTowards(direction: THREE.Vector3, dt: number, rate = 10) {
     if (direction.lengthSq() < 1e-6) {
       return
     }
     const target = Math.atan2(direction.x, direction.z)
-    let delta = target - this.heading
-    delta = Math.atan2(Math.sin(delta), Math.cos(delta))
-    this.heading += delta * Math.min(1, dt * 12)
-    this.root.rotation.y = this.heading
+    const delta = Math.atan2(Math.sin(target - this.headingValue), Math.cos(target - this.headingValue))
+    this.heading = this.headingValue + delta * Math.min(1, dt * rate)
+  }
+
+  reach(amount: number) {
+    this.reachAmount = THREE.MathUtils.clamp(amount, 0, 1)
   }
 
   animate(dt: number, speed: number, elapsed: number, still: boolean) {
-    const moving = speed > 0.05
+    const moving = Math.abs(speed) > 0.05
     if (moving && !still) {
-      this.stride += dt * speed * 1.9
+      this.stride += dt * Math.abs(speed) * 2.2
     } else {
       this.stride *= Math.max(0, 1 - dt * 10)
     }
-    const swing = Math.sin(this.stride) * (moving ? 0.6 : 0)
+    const swing = Math.sin(this.stride) * (moving ? 0.75 : Math.min(0.75, Math.abs(Math.sin(this.stride))))
     this.legs[0].rotation.x = swing
     this.legs[1].rotation.x = -swing
     this.arms[0].rotation.x = -swing * 0.8
-    this.arms[1].rotation.x = swing * 0.8
-    this.body.position.y = still ? 0 : moving ? Math.abs(Math.sin(this.stride)) * 0.08 : Math.sin(elapsed * 2) * 0.03
-    this.body.rotation.x = moving ? 0.08 : 0
-    const haloMaterial = this.halo.material as THREE.MeshBasicMaterial
-    haloMaterial.opacity = still ? 0.6 : 0.45 + Math.sin(elapsed * 3) * 0.15
+    this.arms[1].rotation.x = THREE.MathUtils.lerp(swing * 0.8, -1.35, this.reachAmount)
+    this.arms[1].rotation.z = THREE.MathUtils.lerp(0, -0.15, this.reachAmount)
+    const idle = still ? 0 : Math.sin(elapsed * 2) * 0.012
+    this.body.position.y = moving && !still ? Math.abs(Math.sin(this.stride)) * 0.05 : idle
   }
 }

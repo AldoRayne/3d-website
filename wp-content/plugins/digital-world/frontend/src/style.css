@@ -339,24 +339,6 @@ input {
   animation: dw-rise 0.35s ease-out;
 }
 
-.dw-panel__close {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 36px;
-  height: 36px;
-  border: 0;
-  border-radius: 50%;
-  background: rgba(148, 178, 255, 0.08);
-  font-size: 22px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.dw-panel__close:hover {
-  background: rgba(148, 178, 255, 0.18);
-}
-
 .dw-panel__type {
   display: inline-block;
   margin-bottom: 8px;
@@ -368,7 +350,7 @@ input {
 }
 
 .dw-panel__title {
-  margin: 0 40px 10px 0;
+  margin: 0 0 10px;
   font-size: 26px;
   line-height: 1.15;
   outline: none;
@@ -382,6 +364,9 @@ input {
 }
 
 .dw-panel__cta {
+  border: 0;
+  cursor: pointer;
+  font-size: 15px;
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -685,31 +670,6 @@ kbd {
   animation: dw-rise 0.25s ease-out;
 }
 
-.dw-prompt {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 48px;
-  padding: 0 20px 0 12px;
-  border-radius: 999px;
-  border: 1px solid var(--dw-accent);
-  background: rgba(5, 7, 15, 0.88);
-  box-shadow: 0 0 24px color-mix(in srgb, var(--dw-accent) 40%, transparent);
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  animation: dw-rise 0.25s ease-out;
-}
-
-.dw-prompt kbd {
-  border-color: var(--dw-accent);
-  color: var(--dw-accent);
-}
-
-.dw-prompt:hover {
-  background: color-mix(in srgb, var(--dw-accent) 16%, rgba(5, 7, 15, 0.9));
-}
-
 .dw-panel__actions {
   display: flex;
   align-items: center;
@@ -723,6 +683,37 @@ kbd {
   gap: 6px;
   font-size: 13px;
   color: var(--dw-muted);
+}
+
+.dw-portal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.dw-portal.is-visible {
+  visibility: visible;
+}
+
+.dw-portal iframe {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  border: 0;
+  background: #fff;
+  transform-origin: 0 0;
+}
+
+.dw-app.is-entering .dw-topbar,
+.dw-app.is-entering .dw-list,
+.dw-app.is-entering .dw-side,
+.dw-app.is-entering .dw-labels {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s ease;
 }
 
 @keyframes dw-rise {
@@ -816,11 +807,6 @@ kbd {
     flex-direction: column;
     width: 100%;
     max-width: none;
-  }
-
-  .dw-prompt {
-    min-height: 52px;
-    padding: 0 22px;
   }
 }
 

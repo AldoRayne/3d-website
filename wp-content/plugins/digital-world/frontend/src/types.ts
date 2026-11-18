@@ -2,6 +2,8 @@ export type WorldObjectType = 'building' | 'tower' | 'dome' | 'library' | 'galle
 
 export type WorldAnimation = 'none' | 'floating' | 'rotating' | 'pulse'
 
+export type DoorSide = 'auto' | 'north' | 'east' | 'south' | 'west'
+
 export interface WorldObject {
   id: number
   slug: string
@@ -12,6 +14,7 @@ export interface WorldObject {
   color: string
   animation: WorldAnimation
   scale: number
+  door: DoorSide
   position: { x: number; y: number; z: number }
   model: string | null
   page_id: number | null

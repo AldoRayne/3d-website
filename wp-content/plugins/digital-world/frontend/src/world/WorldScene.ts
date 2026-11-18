@@ -1,35 +1,44 @@
 import * as THREE from 'three'
 import gsap from 'gsap'
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js'
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
 import type { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-import type { CameraTransition, WorldObject } from '@/types'
-import { createPad, createProceduralModel, type ProceduralModel } from './models'
+import type { CameraTransition, DoorSide, WorldObject } from '@/types'
+import { blueprint, rotateCell } from './buildings'
+import { NavGrid, pushOut, type Rect } from './navigation'
 import { Player, PLAYER_RADIUS } from './Player'
+import { texture } from './textures'
+import { VoxelGrid } from './voxels'
+
+export interface ScreenRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+interface Door {
+  pivot: THREE.Group
+  glow: THREE.Mesh
+  world: THREE.Vector3
+  outward: THREE.Vector3
+  front: THREE.Vector3
+}
 
 interface Entry {
   object: WorldObject
-  root: THREE.Group
-  body: THREE.Group
-  model: ProceduralModel
+  frame: THREE.Group
+  quarter: number
+  center: THREE.Vector2
+  rect: Rect
+  height: number
   hitbox: THREE.Mesh
   label: HTMLButtonElement
-  ring: THREE.Mesh
-  zoneRing: THREE.Mesh
-  zoneFill: THREE.Mesh
-  center: THREE.Vector2
-  radius: number
-  zoneRadius: number
-  phase: number
+  mat: THREE.Mesh
+  door: Door
 }
 
 interface Walk {
-  points: THREE.Vector3[]
-  slug: string | null
+  points: THREE.Vector2[]
   resolve: (arrived: boolean) => void
   stuck: number
 }
@@ -49,65 +58,98 @@ export function isWebGLAvailable() {
   }
 }
 
-const WALK_SPEED = 7.5
-const ZONE_WIDTH = 2.2
-const CAMERA_HEIGHT = 3
-const MOVE_KEYS: Record<string, [number, number]> = {
-  ArrowUp: [0, 1],
-  KeyW: [0, 1],
-  ArrowDown: [0, -1],
-  KeyS: [0, -1],
-  ArrowLeft: [-1, 0],
-  KeyA: [-1, 0],
-  ArrowRight: [1, 0],
-  KeyD: [1, 0],
-}
-
 export function isEditableTarget(target: EventTarget | null) {
   const element = target as HTMLElement | null
   return !!element && (element.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName))
 }
 
+const WALK_SPEED = 5.2
+const TURN_SPEED = 2.6
+const ZONE_DEPTH = 2.4
+const ZONE_HALF_WIDTH = 1.3
+const EYE = new THREE.Vector3(0, 1.6, 0)
+const UP = new THREE.Vector3(0, 1, 0)
+const DOOR_QUARTER: Record<Exclude<DoorSide, 'auto'>, number> = { south: 0, east: 1, north: 2, west: 3 }
+const KEYS = {
+  forward: ['ArrowUp', 'KeyW'],
+  back: ['ArrowDown', 'KeyS'],
+  left: ['ArrowLeft', 'KeyA'],
+  right: ['ArrowRight', 'KeyD'],
+}
+const ALL_KEYS = new Set(Object.values(KEYS).flat())
+
+function seeded(seed: number) {
+  let a = seed >>> 0
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0
+    let t = Math.imul(a ^ (a >>> 15), a | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+function quarterVector(quarter: number) {
+  const [x, z] = rotateCell(0, 1, quarter)
+  return new THREE.Vector3(x, 0, z)
+}
+
+function headingOf(direction: THREE.Vector3) {
+  return Math.atan2(direction.x, direction.z)
+}
+
 export class WorldScene {
   private renderer: THREE.WebGLRenderer
   private labels: CSS2DRenderer
-  private composer: EffectComposer | null = null
   private scene = new THREE.Scene()
   private camera: THREE.PerspectiveCamera
-  private controls: OrbitControls
   private clock = new THREE.Clock()
   private raycaster = new THREE.Raycaster()
   private pointer = new THREE.Vector2()
   private ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
   private entries = new Map<string, Entry>()
   private hitboxes: THREE.Mesh[] = []
+  private colliders: Rect[] = []
+  private nav: NavGrid | null = null
+  private terrain: THREE.Object3D | null = null
+  private clouds = new THREE.Group()
+  private sun: THREE.DirectionalLight
   private hovered: string | null = null
   private zone: string | null = null
   private frame = 0
-  private cameraTween: gsap.core.Tween | null = null
   private resizeObserver: ResizeObserver
-  private downAt = { x: 0, y: 0 }
   private worldRadius = 24
+  private spawnPosition = new THREE.Vector3()
   private gltfLoader: GLTFLoader | null = null
   private disposed = false
   private player = new Player()
-  private previousPlayer = new THREE.Vector3()
   private keys = new Set<string>()
   private walk: Walk | null = null
+  private faceAfterWalk: number | null = null
   private marker: THREE.Mesh
-  private zoomedOut = false
+  private mode: 'chase' | 'overview' | 'cinematic' = 'chase'
+  private yawOffset = 0
+  private pitchOffset = 0
+  private distance = 9
+  private look = new THREE.Vector3()
+  private cinematicLook = new THREE.Vector3()
+  private drag: { id: number; x: number; y: number; moved: boolean } | null = null
+  private locked = false
+  private timeline: gsap.core.Timeline | null = null
+  private moveSpeed = 0
+  private shadows: boolean
 
   constructor(
     private container: HTMLElement,
     private options: WorldSceneOptions,
   ) {
     const { clientWidth: width, clientHeight: height } = container
+    this.shadows = !this.lowPower
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     this.renderer.setSize(width, height)
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping
-    this.renderer.toneMappingExposure = 1.05
+    this.renderer.shadowMap.enabled = this.shadows
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
     this.renderer.domElement.classList.add('dw-canvas')
     container.appendChild(this.renderer.domElement)
 
@@ -116,36 +158,36 @@ export class WorldScene {
     this.labels.domElement.classList.add('dw-labels')
     container.appendChild(this.labels.domElement)
 
-    this.camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 600)
+    this.camera = new THREE.PerspectiveCamera(55, width / height, 0.1, 500)
+    this.distance = this.defaultDistance
 
-    this.controls = new OrbitControls(this.camera, this.renderer.domElement)
-    this.controls.enableDamping = true
-    this.controls.dampingFactor = 0.08
-    this.controls.enablePan = false
-    this.controls.minDistance = 6
-    this.controls.maxDistance = 140
-    this.controls.minPolarAngle = Math.PI * 0.12
-    this.controls.maxPolarAngle = Math.PI * 0.46
-
-    this.scene.background = new THREE.Color('#05070f')
-    this.scene.fog = new THREE.FogExp2('#05070f', 0.0085)
+    this.scene.background = new THREE.Color('#9dd4f7')
+    this.scene.fog = new THREE.Fog('#cfe9f8', 70, 220)
+    this.scene.add(new THREE.HemisphereLight('#eaf6ff', '#7d6a4c', 1.5))
+    this.sun = new THREE.DirectionalLight('#fff3d6', 2.2)
+    this.sun.castShadow = this.shadows
+    this.sun.shadow.mapSize.set(2048, 2048)
+    this.sun.shadow.bias = -0.0005
+    this.sun.shadow.normalBias = 0.04
+    this.scene.add(this.sun, this.sun.target)
 
     this.marker = new THREE.Mesh(
-      new THREE.RingGeometry(0.35, 0.5, 32),
-      new THREE.MeshBasicMaterial({ color: '#5eead4', transparent: true, opacity: 0.9, side: THREE.DoubleSide }),
+      new THREE.RingGeometry(0.3, 0.45, 4, 1),
+      new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.9, side: THREE.DoubleSide }),
     )
-    this.marker.rotation.x = -Math.PI / 2
-    this.marker.position.y = 0.04
+    this.marker.rotation.set(-Math.PI / 2, 0, Math.PI / 4)
+    this.marker.position.y = 0.03
     this.marker.visible = false
 
-    this.buildEnvironment()
-    this.scene.add(this.player.root, this.marker)
-    this.setupPostprocessing(width, height)
+    this.scene.add(this.player.root, this.marker, this.clouds)
 
-    this.renderer.domElement.addEventListener('pointermove', this.onPointerMove)
-    this.renderer.domElement.addEventListener('pointerdown', this.onPointerDown)
-    this.renderer.domElement.addEventListener('pointerup', this.onPointerUp)
-    this.renderer.domElement.addEventListener('pointerleave', this.onPointerLeave)
+    const canvas = this.renderer.domElement
+    canvas.addEventListener('pointerdown', this.onPointerDown)
+    canvas.addEventListener('pointermove', this.onPointerMove)
+    canvas.addEventListener('pointerup', this.onPointerUp)
+    canvas.addEventListener('pointercancel', this.onPointerUp)
+    canvas.addEventListener('pointerleave', this.onPointerLeave)
+    canvas.addEventListener('wheel', this.onWheel, { passive: false })
     window.addEventListener('keydown', this.onKeyDown)
     window.addEventListener('keyup', this.onKeyUp)
     window.addEventListener('blur', this.onBlur)
@@ -160,186 +202,69 @@ export class WorldScene {
     return window.matchMedia('(pointer: coarse)').matches || Math.min(window.innerWidth, window.innerHeight) < 600
   }
 
-  private get followDistance() {
-    return this.camera.aspect < 1 ? 24 / Math.max(this.camera.aspect * 1.4, 0.6) : 24
-  }
-
-  private setupPostprocessing(width: number, height: number) {
-    if (this.lowPower) {
-      return
-    }
-    this.composer = new EffectComposer(this.renderer)
-    this.composer.addPass(new RenderPass(this.scene, this.camera))
-    this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(width, height), 0.6, 0.4, 0.3))
-    this.composer.addPass(new OutputPass())
-  }
-
-  private buildEnvironment() {
-    this.scene.add(new THREE.HemisphereLight('#6b8cff', '#05070f', 0.9))
-    const sun = new THREE.DirectionalLight('#cfe3ff', 1.4)
-    sun.position.set(30, 50, 20)
-    this.scene.add(sun)
-    const rim = new THREE.PointLight('#5eead4', 60, 80, 1.6)
-    rim.position.set(0, 18, 0)
-    this.scene.add(rim)
-
-    const starCount = 1600
-    const positions = new Float32Array(starCount * 3)
-    for (let i = 0; i < starCount; i++) {
-      const radius = 160 + Math.random() * 180
-      const theta = Math.random() * Math.PI * 2
-      const phi = Math.acos(Math.random() * 0.9 + 0.05)
-      positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta)
-      positions[i * 3 + 1] = radius * Math.cos(phi) - 20
-      positions[i * 3 + 2] = radius * Math.sin(phi) * Math.sin(theta)
-    }
-    const stars = new THREE.Points(
-      new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(positions, 3)),
-      new THREE.PointsMaterial({ color: '#9fb8ff', size: 0.9, sizeAttenuation: true, fog: false }),
-    )
-    stars.name = 'stars'
-    this.scene.add(stars)
-  }
-
-  private buildIsland(radius: number) {
-    this.scene.getObjectByName('island')?.removeFromParent()
-    const island = new THREE.Group()
-    island.name = 'island'
-
-    const top = new THREE.Mesh(
-      new THREE.CylinderGeometry(radius, radius * 0.92, 1.6, 72),
-      new THREE.MeshStandardMaterial({ color: '#08101f', roughness: 0.9, metalness: 0.2 }),
-    )
-    top.position.y = -0.8
-    const rock = new THREE.Mesh(
-      new THREE.ConeGeometry(radius * 0.92, radius * 0.75, 72, 1, true),
-      new THREE.MeshStandardMaterial({ color: '#060b16', roughness: 1, side: THREE.DoubleSide }),
-    )
-    rock.rotation.x = Math.PI
-    rock.position.y = -1.6 - (radius * 0.75) / 2
-    island.add(top, rock)
-
-    const grid = new THREE.GridHelper(radius * 2, Math.round(radius), '#1d3b5c', '#10213a')
-    const gridMaterial = grid.material as THREE.Material
-    gridMaterial.transparent = true
-    gridMaterial.opacity = 0.45
-    grid.position.y = 0.01
-    const mask = new THREE.Mesh(
-      new THREE.RingGeometry(radius, radius * 1.5, 72),
-      new THREE.MeshBasicMaterial({ color: '#05070f', side: THREE.DoubleSide }),
-    )
-    mask.rotation.x = -Math.PI / 2
-    mask.position.y = 0.02
-    const edge = new THREE.Mesh(
-      new THREE.TorusGeometry(radius, 0.08, 8, 160),
-      new THREE.MeshStandardMaterial({ color: '#5eead4', emissive: '#5eead4', emissiveIntensity: 1.5 }),
-    )
-    edge.rotation.x = Math.PI / 2
-    island.add(grid, mask, edge)
-
-    for (let i = 0; i < 7; i++) {
-      const angle = (i / 7) * Math.PI * 2 + 0.4
-      const distance = radius * (1.35 + (i % 3) * 0.18)
-      const size = 1.5 + (i % 4)
-      const shard = new THREE.Mesh(
-        new THREE.ConeGeometry(size, size * 1.8, 6),
-        new THREE.MeshStandardMaterial({ color: '#0a1324', emissive: '#1e3a8a', emissiveIntensity: 0.25 }),
-      )
-      shard.rotation.x = Math.PI
-      shard.position.set(Math.cos(angle) * distance, -3 + (i % 3) * 3, Math.sin(angle) * distance)
-      shard.userData.float = { base: shard.position.y, phase: i }
-      island.add(shard)
-    }
-
-    this.scene.add(island)
-  }
-
-  private buildPaths(objects: WorldObject[]) {
-    this.scene.getObjectByName('paths')?.removeFromParent()
-    const paths = new THREE.Group()
-    paths.name = 'paths'
-    const hub = objects.reduce<WorldObject | null>(
-      (closest, object) =>
-        !closest || Math.hypot(object.position.x, object.position.z) < Math.hypot(closest.position.x, closest.position.z)
-          ? object
-          : closest,
-      null,
-    )
-    if (!hub) {
-      return
-    }
-    for (const object of objects) {
-      if (object === hub) {
-        continue
-      }
-      const from = new THREE.Vector3(hub.position.x, 0.05, hub.position.z)
-      const to = new THREE.Vector3(object.position.x, 0.05, object.position.z)
-      const line = new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints([from, to]),
-        new THREE.LineDashedMaterial({ color: object.color, dashSize: 0.6, gapSize: 0.5, transparent: true, opacity: 0.6 }),
-      )
-      line.computeLineDistances()
-      paths.add(line)
-    }
-    this.scene.add(paths)
-  }
-
-  private createZone(object: WorldObject, zoneRadius: number) {
-    const color = new THREE.Color(object.color)
-    const zoneRing = new THREE.Mesh(
-      new THREE.RingGeometry(zoneRadius - 0.07, zoneRadius, 72),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, side: THREE.DoubleSide }),
-    )
-    zoneRing.rotation.x = -Math.PI / 2
-    zoneRing.position.set(object.position.x, 0.035, object.position.z)
-    const zoneFill = new THREE.Mesh(
-      new THREE.CircleGeometry(zoneRadius, 72),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }),
-    )
-    zoneFill.rotation.x = -Math.PI / 2
-    zoneFill.position.set(object.position.x, 0.03, object.position.z)
-    this.scene.add(zoneRing, zoneFill)
-    return { zoneRing, zoneFill }
+  private get defaultDistance() {
+    return this.camera.aspect < 1 ? 12 : 9
   }
 
   setObjects(objects: WorldObject[]) {
-    for (const entry of this.entries.values()) {
-      entry.root.removeFromParent()
-      entry.zoneRing.removeFromParent()
-      entry.zoneFill.removeFromParent()
+    this.entries.forEach((entry) => {
+      entry.frame.removeFromParent()
       entry.label.remove()
-    }
+    })
     this.entries.clear()
     this.hitboxes = []
+    this.colliders = []
+    this.terrain?.removeFromParent()
 
-    this.worldRadius = Math.max(
-      22,
-      ...objects.map((object) => Math.hypot(object.position.x, object.position.z) + 9 * object.scale),
+    this.worldRadius = Math.ceil(
+      Math.max(22, ...objects.map((object) => Math.hypot(object.position.x, object.position.z) + 9)),
     )
-    this.controls.maxDistance = this.worldRadius * 3
-    this.buildIsland(this.worldRadius)
-    this.buildPaths(objects)
+    const grid = new VoxelGrid()
+    const floors: Array<[number, number]> = []
 
-    objects.forEach((object, index) => {
-      const model = createProceduralModel(object.type, object.color)
-      const root = new THREE.Group()
-      root.position.set(object.position.x, object.position.y, object.position.z)
-      root.scale.setScalar(object.scale)
-      root.userData.slug = object.slug
+    for (const object of objects) {
+      const plan = blueprint(object.type, object.color)
+      const cx = Math.round(object.position.x)
+      const cz = Math.round(object.position.z)
+      const quarter = this.doorQuarter(object.door, cx, cz)
+      const swap = quarter % 2 === 1
+      const extentX = (swap ? plan.halfZ : plan.halfX) + 0.5
+      const extentZ = (swap ? plan.halfX : plan.halfZ) + 0.5
+      const rect = { minX: cx - extentX, maxX: cx + extentX, minZ: cz - extentZ, maxZ: cz + extentZ }
 
-      const padRadius = model.footprint + 0.6
-      const { group: pad, ring } = createPad(object.color, padRadius)
-      const body = new THREE.Group()
-      body.add(model.group)
-      root.add(pad, body)
+      if (!object.model) {
+        for (const [x, y, z, id] of plan.cells) {
+          const [rx, rz] = rotateCell(x, z, quarter)
+          grid.set(cx + rx, y, cz + rz, id)
+        }
+      }
+      for (let x = -plan.halfX; x <= plan.halfX; x++) {
+        for (let z = -plan.halfZ; z <= plan.halfZ; z++) {
+          const [rx, rz] = rotateCell(x, z, quarter)
+          floors.push([cx + rx, cz + rz])
+        }
+      }
+
+      const frame = new THREE.Group()
+      frame.position.set(cx, 0, cz)
+      frame.rotation.y = (quarter * Math.PI) / 2
 
       const hitbox = new THREE.Mesh(
-        new THREE.CylinderGeometry(model.footprint + 1, model.footprint + 1, model.height + 1, 8),
+        new THREE.BoxGeometry(plan.halfX * 2 + 1, plan.height, plan.halfZ * 2 + 1),
         new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }),
       )
-      hitbox.position.y = (model.height + 1) / 2
+      hitbox.position.y = plan.height / 2
       hitbox.userData.slug = object.slug
-      root.add(hitbox)
+      frame.add(hitbox)
+
+      const door = this.createDoor(frame, plan.halfZ, quarter, cx, cz)
+      const mat = new THREE.Mesh(
+        new THREE.PlaneGeometry(ZONE_HALF_WIDTH * 2, ZONE_DEPTH),
+        new THREE.MeshBasicMaterial({ color: object.color, transparent: true, opacity: 0.18, depthWrite: false }),
+      )
+      mat.rotation.x = -Math.PI / 2
+      mat.position.set(0, 0.015, plan.halfZ + 0.5 + ZONE_DEPTH / 2)
+      frame.add(mat)
 
       const label = document.createElement('button')
       label.type = 'button'
@@ -347,94 +272,233 @@ export class WorldScene {
       label.className = 'dw-label'
       label.style.setProperty('--dw-accent', object.color)
       label.textContent = object.title
-      label.addEventListener('click', () => this.options.onObjectClick(object.slug))
+      label.addEventListener('click', () => !this.locked && this.options.onObjectClick(object.slug))
       label.addEventListener('pointerenter', () => this.setHovered(object.slug))
       label.addEventListener('pointerleave', () => this.setHovered(null))
       const labelObject = new CSS2DObject(label)
-      labelObject.position.set(0, model.height + 1.4, 0)
-      root.add(labelObject)
+      labelObject.position.set(0, plan.height + 1.2, 0)
+      frame.add(labelObject)
 
-      const radius = (padRadius + 0.3) * object.scale
-      const zoneRadius = radius + ZONE_WIDTH
-      const { zoneRing, zoneFill } = this.createZone(object, zoneRadius)
-
-      this.scene.add(root)
+      this.scene.add(frame)
       this.hitboxes.push(hitbox)
+      this.colliders.push(rect)
       this.entries.set(object.slug, {
         object,
-        root,
-        body,
-        model,
+        frame,
+        quarter,
+        center: new THREE.Vector2(cx, cz),
+        rect,
+        height: plan.height,
         hitbox,
         label,
-        ring,
-        zoneRing,
-        zoneFill,
-        center: new THREE.Vector2(object.position.x, object.position.z),
-        radius,
-        zoneRadius,
-        phase: index * 1.3,
+        mat,
+        door,
       })
-    })
+    }
 
-    this.spawn()
+    this.nav = new NavGrid(this.worldRadius, this.colliders, PLAYER_RADIUS)
+    this.spawnPosition = this.findSpawn()
+    const pathCells = this.carvePaths()
+    this.colliders.push(...this.plantTrees(grid, pathCells, floors))
+    this.nav = new NavGrid(this.worldRadius, this.colliders, PLAYER_RADIUS)
+    this.buildTerrain(grid, pathCells, floors)
+    this.buildClouds()
+
+    this.terrain = grid.build({ shadows: this.shadows })
+    this.scene.add(this.terrain)
+    const reach = 26
+    Object.assign(this.sun.shadow.camera, { left: -reach, right: reach, top: reach, bottom: -reach, near: 1, far: 140 })
+    this.sun.shadow.camera.updateProjectionMatrix()
+
+    this.placeAt(this.spawnPosition, headingOf(this.spawnPosition.clone().negate()))
     this.applyHighlight()
     void this.loadModels()
   }
 
-  private spawnPoint() {
-    const inAnyZone = (point: THREE.Vector3) =>
-      [...this.entries.values()].some(
-        (entry) => entry.center.distanceTo(new THREE.Vector2(point.x, point.z)) <= entry.zoneRadius + 0.5,
-      )
+  private doorQuarter(side: DoorSide, cx: number, cz: number) {
+    if (side !== 'auto' && side in DOOR_QUARTER) {
+      return DOOR_QUARTER[side]
+    }
+    if (Math.hypot(cx, cz) < 3) {
+      return 0
+    }
+    return Math.abs(cx) > Math.abs(cz) ? (cx > 0 ? 3 : 1) : cz > 0 ? 2 : 0
+  }
+
+  private createDoor(frame: THREE.Group, halfZ: number, quarter: number, cx: number, cz: number): Door {
+    const face = halfZ + 0.5
+    const pivot = new THREE.Group()
+    pivot.position.set(-0.5, 0, face - 0.07)
+    const plank = new THREE.MeshLambertMaterial({ map: texture('door') })
+    for (const [y, name] of [
+      [0.5, 'doorBottom'],
+      [1.5, 'doorTop'],
+    ] as const) {
+      const face = new THREE.MeshLambertMaterial({ map: texture(name) })
+      const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.98, 1, 0.12), [plank, plank, plank, plank, face, face])
+      leaf.position.set(0.5, y, 0)
+      leaf.castShadow = this.shadows
+      pivot.add(leaf)
+    }
+    const glow = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 2),
+      new THREE.MeshBasicMaterial({ color: '#fff4cf', transparent: true, opacity: 0 }),
+    )
+    glow.position.set(0, 1, face - 0.45)
+    frame.add(pivot, glow)
+
+    const outward = quarterVector(quarter)
+    const world = new THREE.Vector3(cx, 0, cz).addScaledVector(outward, face)
+    return { pivot, glow, world, outward, front: world.clone().addScaledVector(outward, 1.1) }
+  }
+
+  private findSpawn() {
     const angles = [...this.entries.values()]
       .filter((entry) => entry.center.length() > 2)
       .map((entry) => Math.atan2(entry.center.y, entry.center.x))
       .sort((a, b) => a - b)
     let heading = Math.PI / 2
-    if (angles.length) {
-      let widest = -1
-      angles.forEach((angle, i) => {
-        const next = i + 1 < angles.length ? angles[i + 1] : angles[0] + Math.PI * 2
-        if (next - angle > widest) {
-          widest = next - angle
-          heading = angle + widest / 2
-        }
-      })
-    }
-    for (const share of [0.78, 0.68, 0.88, 0.55]) {
+    let widest = -1
+    angles.forEach((angle, i) => {
+      const next = i + 1 < angles.length ? angles[i + 1] : angles[0] + Math.PI * 2
+      if (next - angle > widest) {
+        widest = next - angle
+        heading = angle + widest / 2
+      }
+    })
+    for (const share of [0.72, 0.62, 0.82, 0.5]) {
       for (let i = 0; i < 24; i++) {
         const angle = heading + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * (Math.PI / 24)
         const point = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle)).multiplyScalar(this.worldRadius * share)
-        if (!inAnyZone(point)) {
+        point.set(Math.round(point.x), 0, Math.round(point.z))
+        if (this.nav?.isClear(new THREE.Vector2(point.x, point.z), 2) && !this.zoneAt(point)) {
           return point
         }
       }
     }
-    return new THREE.Vector3(0, 0, this.worldRadius * 0.62)
+    return new THREE.Vector3(0, 0, Math.round(this.worldRadius * 0.6))
   }
 
-  private spawn() {
-    this.player.position.copy(this.resolveCollisions(this.spawnPoint()))
-    this.player.faceTowards(this.player.position.clone().negate().setY(0), 1)
-    this.previousPlayer.copy(this.player.position)
-    this.resetCamera(true)
-    this.updateZone()
-  }
-
-  private resetCamera(instant: boolean) {
-    const target = this.player.position.clone().setY(CAMERA_HEIGHT)
-    const away = new THREE.Vector3(this.player.position.x, 0, this.player.position.z)
-    if (away.lengthSq() < 1) {
-      away.set(0, 0, 1)
+  private carvePaths() {
+    const cells = new Set<string>()
+    const start = new THREE.Vector2(this.spawnPosition.x, this.spawnPosition.z)
+    for (const entry of this.entries.values()) {
+      const front = new THREE.Vector2(entry.door.front.x, entry.door.front.z)
+      const path = this.nav?.findPath(start, front) ?? []
+      let from = start.clone()
+      for (const point of path) {
+        const steps = Math.max(1, Math.ceil(from.distanceTo(point) * 2))
+        for (let i = 0; i <= steps; i++) {
+          const p = from.clone().lerp(point, i / steps)
+          cells.add(`${Math.round(p.x)},${Math.round(p.y)}`)
+        }
+        from = point
+      }
+      for (let d = 0; d <= 2; d++) {
+        const p = entry.door.world.clone().addScaledVector(entry.door.outward, 0.5 + d)
+        cells.add(`${Math.round(p.x)},${Math.round(p.z)}`)
+      }
     }
-    away.normalize()
-    const position = target
-      .clone()
-      .addScaledVector(away, this.followDistance * 0.86)
-      .add(new THREE.Vector3(0, this.followDistance * 0.5, 0))
-    this.zoomedOut = false
-    this.moveCamera(position, target, instant ? 'instant' : 'fly', 0.9)
+    return cells
+  }
+
+  private plantTrees(grid: VoxelGrid, paths: Set<string>, floors: Array<[number, number]>) {
+    const rnd = seeded(this.entries.size * 7919 + this.worldRadius)
+    const taken = new Set(floors.map(([x, z]) => `${x},${z}`))
+    const rects: Rect[] = []
+    const planted: THREE.Vector2[] = []
+    const spawn = new THREE.Vector2(this.spawnPosition.x, this.spawnPosition.z)
+    const target = Math.round(this.worldRadius * 0.6)
+    for (let attempt = 0; attempt < 400 && planted.length < target; attempt++) {
+      const angle = rnd() * Math.PI * 2
+      const radius = Math.sqrt(rnd()) * (this.worldRadius - 3)
+      const x = Math.round(Math.cos(angle) * radius)
+      const z = Math.round(Math.sin(angle) * radius)
+      const point = new THREE.Vector2(x, z)
+      let nearPath = false
+      for (let dx = -1; dx <= 1 && !nearPath; dx++) {
+        for (let dz = -1; dz <= 1 && !nearPath; dz++) {
+          nearPath = paths.has(`${x + dx},${z + dz}`)
+        }
+      }
+      if (
+        nearPath ||
+        taken.has(`${x},${z}`) ||
+        !this.nav?.isClear(point, 2.6) ||
+        point.distanceTo(spawn) < 5 ||
+        planted.some((other) => other.distanceTo(point) < 4) ||
+        [...this.entries.values()].some(
+          (entry) => point.distanceTo(new THREE.Vector2(entry.door.front.x, entry.door.front.z)) < 4,
+        )
+      ) {
+        continue
+      }
+      planted.push(point)
+      const trunk = 3 + Math.floor(rnd() * 2)
+      for (let y = 0; y < trunk; y++) {
+        grid.set(x, y, z, 'log')
+      }
+      for (let y = trunk - 1; y <= trunk + 2; y++) {
+        const r = y >= trunk + 1 ? 1 : 2
+        for (let dx = -r; dx <= r; dx++) {
+          for (let dz = -r; dz <= r; dz++) {
+            const corner = Math.abs(dx) === r && Math.abs(dz) === r
+            if ((corner && (r === 1 ? y === trunk + 2 : rnd() < 0.6)) || (dx === 0 && dz === 0 && y < trunk)) {
+              continue
+            }
+            grid.set(x + dx, y, z + dz, 'leaves')
+          }
+        }
+      }
+      rects.push({ minX: x - 0.5, maxX: x + 0.5, minZ: z - 0.5, maxZ: z + 0.5 })
+    }
+    return rects
+  }
+
+  private buildTerrain(grid: VoxelGrid, paths: Set<string>, floors: Array<[number, number]>) {
+    const rnd = seeded(this.worldRadius * 31)
+    const floorSet = new Set(floors.map(([x, z]) => `${x},${z}`))
+    const radius = this.worldRadius
+    for (let x = -radius - 1; x <= radius + 1; x++) {
+      for (let z = -radius - 1; z <= radius + 1; z++) {
+        const k = `${x},${z}`
+        const jitter = rnd() * 0.9
+        const distance = Math.hypot(x, z) - jitter
+        if (distance > radius) {
+          continue
+        }
+        grid.set(x, -1, z, floorSet.has(k) ? 'planks' : paths.has(k) ? 'path' : 'grass')
+        for (let level = 2; level <= 9; level++) {
+          if (distance > radius - (level - 1) * 1.6 - jitter * 1.5) {
+            break
+          }
+          grid.set(x, -level, z, level <= 3 ? 'dirt' : 'stone')
+        }
+      }
+    }
+  }
+
+  private buildClouds() {
+    this.clouds.clear()
+    const rnd = seeded(4242)
+    const grid = new VoxelGrid()
+    for (let c = 0; c < 9; c++) {
+      const angle = rnd() * Math.PI * 2
+      const distance = 20 + rnd() * 70
+      const cx = Math.round(Math.cos(angle) * distance)
+      const cz = Math.round(Math.sin(angle) * distance)
+      const cy = 26 + Math.floor(rnd() * 10)
+      const w = 4 + Math.floor(rnd() * 5)
+      const d = 3 + Math.floor(rnd() * 4)
+      for (let x = -w; x <= w; x++) {
+        for (let z = -d; z <= d; z++) {
+          if ((x * x) / (w * w) + (z * z) / (d * d) <= 1 + rnd() * 0.2) {
+            grid.set(cx + x, cy, cz + z, 'cloud')
+          }
+        }
+      }
+    }
+    this.clouds.add(grid.build({ shadows: false }))
   }
 
   private async loadModels() {
@@ -453,101 +517,138 @@ export class WorldScene {
       try {
         const gltf = await this.gltfLoader.loadAsync(entry.object.model as string)
         const model = gltf.scene
+        const { width, depth } = (entry.hitbox.geometry as THREE.BoxGeometry).parameters
         const box = new THREE.Box3().setFromObject(model)
         const size = box.getSize(new THREE.Vector3())
-        const fit = entry.model.height / Math.max(size.y, 0.001)
+        const fit = Math.min(width / Math.max(size.x, 0.001), depth / Math.max(size.z, 0.001))
         model.scale.setScalar(fit)
         model.position.y = -box.min.y * fit
-        entry.body.clear()
-        entry.body.add(model)
-        entry.model.spinners = []
-        entry.model.floaters = []
+        entry.frame.add(model)
       } catch (error) {
-        console.warn(`[digital-world] GLB for "${entry.object.slug}" failed, keeping procedural model`, error)
+        console.warn(`[digital-world] GLB for "${entry.object.slug}" failed`, error)
       }
     }
   }
 
-  private moveCamera(position: THREE.Vector3, target: THREE.Vector3, transition: CameraTransition, duration = 1.4) {
-    this.cameraTween?.kill()
-    if (this.options.reducedMotion || transition === 'instant') {
-      this.camera.position.copy(position)
-      this.controls.target.copy(target)
-      this.controls.update()
-      return
+  private zoneAt(point: THREE.Vector3) {
+    let current: string | null = null
+    let best = Infinity
+    for (const [slug, entry] of this.entries) {
+      const offset = point.clone().sub(entry.door.world)
+      const depth = offset.dot(entry.door.outward)
+      const lateral = Math.abs(offset.x * entry.door.outward.z - offset.z * entry.door.outward.x)
+      if (depth >= 0 && depth <= ZONE_DEPTH && lateral <= ZONE_HALF_WIDTH && depth < best) {
+        current = slug
+        best = depth
+      }
     }
-    const fromPosition = this.camera.position.clone()
-    const fromTarget = this.controls.target.clone()
-    const fromPlayer = this.player.position.clone()
-    const shift = new THREE.Vector3()
-    const state = { t: 0 }
-    this.cameraTween = gsap.to(state, {
-      t: 1,
-      duration,
-      ease: 'power2.inOut',
-      onUpdate: () => {
-        shift.copy(this.player.position).sub(fromPlayer)
-        this.camera.position.copy(fromPosition).lerp(position, state.t).add(shift)
-        this.controls.target.copy(fromTarget).lerp(target, state.t).add(shift)
-      },
-    })
+    return current
   }
 
-  overview(transition: CameraTransition = 'fly') {
-    const radius = this.worldRadius
-    const halfV = THREE.MathUtils.degToRad(this.camera.fov) / 2
-    const halfH = Math.atan(Math.tan(halfV) * this.camera.aspect)
-    const distance = Math.max(radius * 2.2, (radius / Math.tan(halfH)) * 1.3)
-    const target = this.player.position.clone().setY(CAMERA_HEIGHT)
-    const direction = new THREE.Vector3(0, 0.57, 0.82).normalize()
-    this.zoomedOut = true
-    this.moveCamera(target.clone().addScaledVector(direction, distance), target, transition)
+  private placeAt(point: THREE.Vector3, heading: number) {
+    this.player.position.set(point.x, 0, point.z)
+    this.player.heading = heading
+    this.yawOffset = 0
+    this.pitchOffset = 0
+    this.mode = 'chase'
+    this.snapCamera()
+    this.updateZone()
   }
 
-  approachPoint(slug: string) {
+  private snapCamera() {
+    const { position, target } = this.chasePose()
+    this.camera.position.copy(position)
+    this.look.copy(target)
+    this.camera.lookAt(this.look)
+  }
+
+  private chasePose() {
+    const yaw = this.player.heading + this.yawOffset
+    const base = THREE.MathUtils.clamp(0.36 + this.pitchOffset, 0.05, 1.25)
+    const target = this.player.position.clone().add(EYE)
+    let chosen: { direction: THREE.Vector3; distance: number } | null = null
+    for (const pitch of [base, Math.max(base, 0.75), Math.max(base, 1.05)]) {
+      const direction = new THREE.Vector3(
+        -Math.sin(yaw) * Math.cos(pitch),
+        Math.sin(pitch),
+        -Math.cos(yaw) * Math.cos(pitch),
+      )
+      this.raycaster.set(target, direction)
+      this.raycaster.far = this.distance
+      const hit = this.raycaster.intersectObjects(this.hitboxes, false)[0]
+      const distance = hit ? Math.max(1.4, hit.distance - 0.3) : this.distance
+      chosen ??= { direction, distance }
+      if (distance >= Math.min(this.distance, 5)) {
+        chosen = { direction, distance }
+        break
+      }
+    }
+    const best = chosen as { direction: THREE.Vector3; distance: number }
+    this.raycaster.far = Infinity
+    return { position: target.clone().addScaledVector(best.direction, best.distance), target }
+  }
+
+  placeAtDoor(slug: string) {
     const entry = this.entries.get(slug)
     if (!entry) {
-      return null
+      return
     }
-    const from = new THREE.Vector2(this.player.position.x, this.player.position.z).sub(entry.center)
-    if (from.lengthSq() < 0.01) {
-      from.set(0, 1)
+    this.timeline?.kill()
+    this.resetDoor(entry)
+    this.cancelWalk()
+    this.locked = false
+    this.player.reach(0)
+    this.player.root.visible = true
+    this.placeAt(entry.door.front, headingOf(entry.door.outward.clone().negate()))
+  }
+
+  overview() {
+    if (!this.locked) {
+      this.mode = 'overview'
     }
-    from.normalize().multiplyScalar(entry.radius + PLAYER_RADIUS + 0.9)
-    return this.clampToIsland(new THREE.Vector3(entry.center.x + from.x, 0, entry.center.y + from.y))
   }
 
   walkTo(slug: string, transition: CameraTransition = 'fly'): Promise<boolean> {
-    const point = this.approachPoint(slug)
-    if (!point) {
+    const entry = this.entries.get(slug)
+    if (!entry || this.locked) {
       return Promise.resolve(false)
     }
-    if (transition === 'instant') {
+    const doorHeading = headingOf(entry.door.outward.clone().negate())
+    if (transition === 'instant' || this.options.reducedMotion) {
       this.cancelWalk()
-      this.player.position.copy(this.resolveCollisions(point))
-      const entry = this.entries.get(slug) as Entry
-      this.player.faceTowards(new THREE.Vector3(entry.center.x - point.x, 0, entry.center.y - point.z), 1)
-      this.followPlayer()
-      this.resetCamera(true)
-      this.updateZone()
+      this.placeAt(entry.door.front, doorHeading)
       return Promise.resolve(true)
     }
-    return this.startWalk(point, slug)
+    return this.startWalk(new THREE.Vector2(entry.door.front.x, entry.door.front.z), doorHeading)
   }
 
-  private startWalk(point: THREE.Vector3, slug: string | null) {
+  private startWalk(goal: THREE.Vector2, face: number | null = null) {
     this.cancelWalk()
-    if (this.zoomedOut) {
-      this.resetCamera(false)
+    const from = new THREE.Vector2(this.player.position.x, this.player.position.z)
+    const points = this.nav?.findPath(from, goal)
+    if (!points?.length) {
+      return Promise.resolve(false)
     }
-    this.marker.position.set(point.x, 0.04, point.z)
+    this.mode = 'chase'
+    const last = points[points.length - 1]
+    this.marker.position.set(last.x, 0.03, last.y)
     this.marker.visible = true
     return new Promise<boolean>((resolve) => {
-      this.walk = { points: this.buildPath(this.player.position.clone(), point, 0), slug, resolve, stuck: 0 }
+      this.walk = {
+        points,
+        stuck: 0,
+        resolve: (arrived) => {
+          if (arrived) {
+            this.faceAfterWalk = face
+          }
+          resolve(arrived)
+        },
+      }
     })
   }
 
   private cancelWalk() {
+    this.faceAfterWalk = null
     if (this.walk) {
       const { resolve } = this.walk
       this.walk = null
@@ -556,157 +657,113 @@ export class WorldScene {
     this.marker.visible = false
   }
 
-  private buildPath(start: THREE.Vector3, end: THREE.Vector3, depth: number): THREE.Vector3[] {
-    if (depth > 3) {
-      return [end]
+  private resolve(point: THREE.Vector2) {
+    for (const rect of this.colliders) {
+      pushOut(point, rect, PLAYER_RADIUS)
     }
-    const segment = new THREE.Vector2(end.x - start.x, end.z - start.z)
-    const length = segment.length()
-    if (length < 0.01) {
-      return [end]
-    }
-    const direction = segment.clone().divideScalar(length)
-    let blocker: { entry: Entry; t: number; closest: THREE.Vector2 } | null = null
-    for (const entry of this.entries.values()) {
-      const toCenter = entry.center.clone().sub(new THREE.Vector2(start.x, start.z))
-      const t = THREE.MathUtils.clamp(toCenter.dot(direction), 0, length)
-      const closest = new THREE.Vector2(start.x, start.z).addScaledVector(direction, t)
-      const clearance = entry.radius + PLAYER_RADIUS + 0.15
-      if (t > 0 && t < length && closest.distanceTo(entry.center) < clearance && (!blocker || t < blocker.t)) {
-        blocker = { entry, t, closest }
-      }
-    }
-    if (!blocker) {
-      return [end]
-    }
-    const side = blocker.closest.clone().sub(blocker.entry.center)
-    if (side.lengthSq() < 1e-4) {
-      side.set(-direction.y, direction.x)
-    }
-    side.normalize().multiplyScalar(blocker.entry.radius + PLAYER_RADIUS + 1.4)
-    const waypoint = this.clampToIsland(
-      new THREE.Vector3(blocker.entry.center.x + side.x, 0, blocker.entry.center.y + side.y),
-    )
-    return [...this.buildPath(start, waypoint, depth + 1), ...this.buildPath(waypoint, end, depth + 1)]
-  }
-
-  private clampToIsland(point: THREE.Vector3) {
-    const limit = this.worldRadius - 1.2
-    const distance = Math.hypot(point.x, point.z)
+    const limit = this.worldRadius - 1.3
+    const distance = point.length()
     if (distance > limit) {
-      point.x *= limit / distance
-      point.z *= limit / distance
+      point.multiplyScalar(limit / distance)
     }
     return point
   }
 
-  private resolveCollisions(point: THREE.Vector3) {
-    for (const entry of this.entries.values()) {
-      const dx = point.x - entry.center.x
-      const dz = point.z - entry.center.y
-      const distance = Math.hypot(dx, dz)
-      const minimum = entry.radius + PLAYER_RADIUS
-      if (distance < minimum) {
-        const scale = distance > 1e-4 ? minimum / distance : 0
-        point.x = entry.center.x + (scale ? dx * scale : minimum)
-        point.z = entry.center.y + dz * scale
-      }
-    }
-    return this.clampToIsland(point)
-  }
-
-  private keyboardDirection() {
-    let right = 0
-    let forward = 0
-    for (const code of this.keys) {
-      const axis = MOVE_KEYS[code]
-      if (axis) {
-        right += axis[0]
-        forward += axis[1]
-      }
-    }
-    if (!right && !forward) {
-      return null
-    }
-    const ahead = new THREE.Vector3()
-    this.camera.getWorldDirection(ahead)
-    ahead.y = 0
-    ahead.normalize()
-    const side = new THREE.Vector3().crossVectors(ahead, new THREE.Vector3(0, 1, 0))
-    return ahead.multiplyScalar(forward).addScaledVector(side, right).normalize()
+  private pressed(list: string[]) {
+    return list.some((code) => this.keys.has(code))
   }
 
   private stepPlayer(dt: number) {
-    const before = this.player.position.clone()
-    const manual = this.keyboardDirection()
-    let direction: THREE.Vector3 | null = null
+    if (this.locked) {
+      return
+    }
+    const turn = (this.pressed(KEYS.left) ? 1 : 0) - (this.pressed(KEYS.right) ? 1 : 0)
+    const move = (this.pressed(KEYS.forward) ? 1 : 0) - (this.pressed(KEYS.back) ? 1 : 0)
+    const before = new THREE.Vector2(this.player.position.x, this.player.position.z)
+    let velocity: THREE.Vector2 | null = null
 
-    if (manual) {
-      if (this.walk) {
-        this.cancelWalk()
+    if (turn || move) {
+      this.cancelWalk()
+      this.mode = 'chase'
+      this.player.heading += turn * TURN_SPEED * dt
+      if (move) {
+        const forward = this.player.forward
+        velocity = new THREE.Vector2(forward.x, forward.z).multiplyScalar(move * WALK_SPEED * (move > 0 ? 1 : 0.55))
       }
-      if (this.zoomedOut) {
-        this.resetCamera(false)
-      }
-      direction = manual
     } else if (this.walk) {
-      const next = this.walk.points[0]
-      const toNext = new THREE.Vector3(next.x - before.x, 0, next.z - before.z)
-      if (toNext.length() < 0.25) {
+      const toNext = this.walk.points[0].clone().sub(before)
+      if (toNext.length() < 0.2) {
         this.walk.points.shift()
         if (!this.walk.points.length) {
-          const { resolve, slug } = this.walk
+          const { resolve } = this.walk
           this.walk = null
           this.marker.visible = false
-          if (slug) {
-            const entry = this.entries.get(slug) as Entry
-            this.player.faceTowards(new THREE.Vector3(entry.center.x - before.x, 0, entry.center.y - before.z), 1)
-          }
           resolve(true)
         }
       } else {
-        direction = toNext.normalize()
+        this.player.turnTowards(new THREE.Vector3(toNext.x, 0, toNext.y), dt, 9)
+        const remaining = toNext.length()
+        velocity = toNext.normalize().multiplyScalar(Math.min(WALK_SPEED, remaining / Math.max(dt, 1e-3)))
+      }
+    } else if (this.faceAfterWalk !== null) {
+      const target = this.faceAfterWalk
+      this.player.turnTowards(new THREE.Vector3(Math.sin(target), 0, Math.cos(target)), dt, 8)
+      if (Math.abs(Math.atan2(Math.sin(target - this.player.heading), Math.cos(target - this.player.heading))) < 0.02) {
+        this.faceAfterWalk = null
       }
     }
 
-    if (direction) {
-      const step = Math.min(WALK_SPEED * dt, 1)
-      const next = this.resolveCollisions(before.clone().addScaledVector(direction, step))
-      this.player.position.copy(next)
-      this.player.faceTowards(direction, dt)
+    this.moveSpeed = 0
+    if (velocity && dt > 0) {
+      const substeps = Math.ceil(dt / 0.03)
+      const step = velocity.clone().multiplyScalar(dt / substeps)
+      const next = before.clone()
+      for (let i = 0; i < substeps; i++) {
+        this.resolve(next.add(step))
+      }
+      this.player.position.set(next.x, 0, next.y)
+      const moved = next.distanceTo(before)
+      this.moveSpeed = moved / dt
       if (this.walk) {
-        this.walk.stuck = before.distanceTo(next) < step * 0.2 ? this.walk.stuck + dt : 0
+        this.walk.stuck = moved < velocity.length() * dt * 0.2 ? this.walk.stuck + dt : 0
         if (this.walk.stuck > 0.6) {
           this.cancelWalk()
         }
       }
     }
-
-    const moved = this.player.position.distanceTo(before)
-    return dt > 0 ? moved / dt : 0
   }
 
-  private followPlayer() {
-    const delta = this.player.position.clone().sub(this.previousPlayer)
-    if (delta.lengthSq() > 0) {
-      if (!this.cameraTween?.isActive()) {
-        this.camera.position.add(delta)
-        this.controls.target.add(delta)
-      }
-      this.previousPlayer.copy(this.player.position)
+  private updateCamera(dt: number) {
+    if (this.mode === 'cinematic') {
+      this.camera.lookAt(this.cinematicLook)
+      return
     }
+    if (!this.drag?.moved) {
+      const decay = Math.exp(-dt * 3)
+      this.yawOffset *= decay
+      this.pitchOffset *= decay
+    }
+    let position: THREE.Vector3
+    let target: THREE.Vector3
+    if (this.mode === 'overview') {
+      const radius = this.worldRadius
+      const away = new THREE.Vector3(this.player.position.x, 0, this.player.position.z)
+      if (away.lengthSq() < 1) {
+        away.set(0, 0, 1)
+      }
+      position = away.normalize().multiplyScalar(radius * 1.5).add(new THREE.Vector3(0, radius * 1.4, 0))
+      target = new THREE.Vector3()
+    } else {
+      ;({ position, target } = this.chasePose())
+    }
+    const k = 1 - Math.exp(-dt * (this.mode === 'overview' ? 2.5 : 9))
+    this.camera.position.lerp(position, k)
+    this.look.lerp(target, k)
+    this.camera.lookAt(this.look)
   }
 
   private updateZone() {
-    let current: string | null = null
-    let best = Infinity
-    for (const [slug, entry] of this.entries) {
-      const distance = entry.center.distanceTo(new THREE.Vector2(this.player.position.x, this.player.position.z))
-      if (distance <= entry.zoneRadius && distance < best) {
-        current = slug
-        best = distance
-      }
-    }
+    const current = this.locked ? this.zone : this.zoneAt(this.player.position)
     if (current !== this.zone) {
       this.zone = current
       this.applyHighlight()
@@ -726,15 +783,223 @@ export class WorldScene {
   private applyHighlight() {
     for (const [slug, entry] of this.entries) {
       const inZone = slug === this.zone
-      const active = inZone || slug === this.hovered
-      entry.label.classList.toggle('is-active', active)
+      entry.label.classList.toggle('is-active', inZone || slug === this.hovered)
       entry.label.classList.toggle('is-zone', inZone)
-      ;(entry.ring.material as THREE.MeshBasicMaterial).opacity = active ? 1 : 0.5
-      ;(entry.zoneRing.material as THREE.MeshBasicMaterial).opacity = inZone ? 0.9 : 0.22
-      ;(entry.zoneFill.material as THREE.MeshBasicMaterial).opacity = inZone ? 0.12 : 0
-      for (const material of entry.model.glowMaterials) {
-        material.userData.boost = active ? 1.6 : 1
+      ;(entry.mat.material as THREE.MeshBasicMaterial).opacity = inZone ? 0.45 : 0.18
+    }
+  }
+
+  private resetDoor(entry: Entry) {
+    entry.door.pivot.rotation.y = 0
+    ;(entry.door.glow.material as THREE.MeshBasicMaterial).opacity = 0
+  }
+
+  private apertureRect(entry: Entry): ScreenRect {
+    const lateral = new THREE.Vector3(entry.door.outward.z, 0, -entry.door.outward.x)
+    const bounds = this.container.getBoundingClientRect()
+    const xs: number[] = []
+    const ys: number[] = []
+    this.camera.updateMatrixWorld()
+    for (const side of [-0.5, 0.5]) {
+      for (const y of [0, 2]) {
+        const point = entry.door.world.clone().addScaledVector(lateral, side).setY(y).project(this.camera)
+        xs.push(bounds.left + ((point.x + 1) / 2) * bounds.width)
+        ys.push(bounds.top + ((1 - point.y) / 2) * bounds.height)
       }
+    }
+    const x = Math.min(...xs)
+    const y = Math.min(...ys)
+    return { x, y, width: Math.max(1, Math.max(...xs) - x), height: Math.max(1, Math.max(...ys) - y) }
+  }
+
+  enter(slug: string, portal: { prepare: () => Promise<void>; frame: (rect: ScreenRect, progress: number) => void }) {
+    const entry = this.entries.get(slug)
+    if (!entry || this.locked) {
+      return Promise.resolve(false)
+    }
+    this.locked = true
+    this.cancelWalk()
+    this.keys.clear()
+    const { door } = entry
+    const inward = door.outward.clone().negate()
+    const doorHeading = headingOf(inward)
+
+    if (this.options.reducedMotion) {
+      door.pivot.rotation.y = 1.8
+      return portal.prepare().then(() => {
+        portal.frame(this.apertureRect(entry), 1)
+        return true
+      })
+    }
+
+    const player = this.player
+    const start = player.position.clone()
+    const right = new THREE.Vector3().crossVectors(inward, UP).normalize()
+    const doorCenter = door.world.clone().setY(1)
+    const portrait = this.camera.aspect < 1 ? 1.6 : 1
+    const shoulder = door.world.clone().addScaledVector(door.outward, 4.2 * portrait).addScaledVector(right, 0.65).setY(2.2 + (portrait - 1))
+    const approach = door.world.clone().addScaledVector(door.outward, 3.1 * portrait).setY(1.15)
+    const through = door.world.clone().addScaledVector(door.outward, 0.25).setY(1)
+    const inside = door.world.clone().addScaledVector(inward, 1.2)
+    const cameraFrom = this.camera.position.clone()
+    const lookFrom = this.look.clone()
+    this.cinematicLook.copy(lookFrom)
+    this.mode = 'cinematic'
+
+    const state = { approach: 0, camera: 0, reach: 0, door: 0, walkIn: 0, dolly: 0, push: 0 }
+    const startHeading = player.heading
+    const turn = Math.atan2(Math.sin(doorHeading - startHeading), Math.cos(doorHeading - startHeading))
+    const approachTime = Math.min(0.8, start.distanceTo(door.front) / WALK_SPEED)
+
+    return new Promise<boolean>((resolve) => {
+      const tl = gsap.timeline()
+      this.timeline = tl
+      tl.to(state, {
+        approach: 1,
+        duration: Math.max(approachTime, 0.3),
+        ease: 'power1.inOut',
+        onUpdate: () => {
+          player.position.lerpVectors(start, door.front, state.approach)
+          player.heading = startHeading + turn * state.approach
+          this.moveSpeed = approachTime > 0.05 ? WALK_SPEED : 0
+        },
+        onComplete: () => {
+          this.moveSpeed = 0
+        },
+      })
+      tl.to(
+        state,
+        {
+          camera: 1,
+          duration: 0.9,
+          ease: 'power2.inOut',
+          onUpdate: () => {
+            const arc = Math.sin(Math.PI * state.camera)
+            this.camera.position
+              .lerpVectors(cameraFrom, shoulder, state.camera)
+              .addScaledVector(right, arc * 1.6)
+              .add(new THREE.Vector3(0, arc * 1.4, 0))
+            this.cinematicLook.lerpVectors(lookFrom, doorCenter, state.camera)
+          },
+        },
+        0,
+      )
+      tl.to(state, { reach: 1, duration: 0.25, onUpdate: () => player.reach(state.reach) })
+      tl.to(state, {
+        door: 1,
+        duration: 0.6,
+        ease: 'power2.out',
+        onUpdate: () => {
+          door.pivot.rotation.y = state.door * 1.8
+          ;(door.glow.material as THREE.MeshBasicMaterial).opacity = state.door
+        },
+      })
+      tl.to(state, { reach: 0, duration: 0.25, onUpdate: () => player.reach(state.reach) }, '-=0.15')
+      tl.to(
+        state,
+        {
+          walkIn: 1,
+          duration: 0.95,
+          ease: 'none',
+          onUpdate: () => {
+            player.position.lerpVectors(door.front, inside, state.walkIn)
+            this.moveSpeed = WALK_SPEED * 0.8
+            player.root.visible = state.walkIn < 0.8
+          },
+          onComplete: () => {
+            this.moveSpeed = 0
+          },
+        },
+        '-=0.05',
+      )
+      tl.to(
+        state,
+        {
+          dolly: 1,
+          duration: 1,
+          ease: 'power1.inOut',
+          onUpdate: () => {
+            this.camera.position.lerpVectors(shoulder, approach, state.dolly)
+          },
+        },
+        '<0.2',
+      )
+      tl.add(() => {
+        void portal.prepare().then(() => {
+          this.timeline = gsap.timeline().to(state, {
+            push: 1,
+            duration: 1.15,
+            ease: 'power2.in',
+            onUpdate: () => {
+              this.camera.position.lerpVectors(approach, through, state.push)
+              this.cinematicLook.copy(doorCenter).addScaledVector(inward, state.push * 1.5)
+              this.camera.lookAt(this.cinematicLook)
+              portal.frame(this.apertureRect(entry), state.push)
+            },
+            onComplete: () => resolve(true),
+          })
+        })
+      })
+    })
+  }
+
+  private onPointerDown = (event: PointerEvent) => {
+    if (!this.drag) {
+      this.drag = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false }
+    }
+  }
+
+  private onPointerMove = (event: PointerEvent) => {
+    if (this.drag && this.drag.id === event.pointerId) {
+      const dx = event.clientX - this.drag.x
+      const dy = event.clientY - this.drag.y
+      if (!this.drag.moved && Math.hypot(dx, dy) > 6) {
+        this.drag.moved = true
+        this.renderer.domElement.setPointerCapture(event.pointerId)
+      }
+      if (this.drag.moved) {
+        if (!this.locked) {
+          this.yawOffset -= dx * 0.006
+          this.pitchOffset = THREE.MathUtils.clamp(this.pitchOffset + dy * 0.004, -0.3, 0.85)
+        }
+        this.drag.x = event.clientX
+        this.drag.y = event.clientY
+      }
+      return
+    }
+    if (event.pointerType === 'mouse') {
+      this.setPointer(event)
+      this.setHovered(this.pickObject())
+    }
+  }
+
+  private onPointerUp = (event: PointerEvent) => {
+    const drag = this.drag
+    if (!drag || drag.id !== event.pointerId) {
+      return
+    }
+    this.drag = null
+    if (drag.moved || event.type === 'pointercancel' || this.locked) {
+      return
+    }
+    this.setPointer(event)
+    const slug = this.pickObject()
+    if (slug) {
+      this.options.onObjectClick(slug)
+      return
+    }
+    const point = this.raycaster.ray.intersectPlane(this.ground, new THREE.Vector3())
+    if (point && Math.hypot(point.x, point.z) < this.worldRadius - 1) {
+      void this.startWalk(this.resolve(new THREE.Vector2(point.x, point.z)))
+    }
+  }
+
+  private onPointerLeave = () => this.setHovered(null)
+
+  private onWheel = (event: WheelEvent) => {
+    event.preventDefault()
+    if (!this.locked) {
+      this.distance = THREE.MathUtils.clamp(this.distance + event.deltaY * 0.01, 4, 20)
     }
   }
 
@@ -749,41 +1014,14 @@ export class WorldScene {
     return (hit?.object.userData.slug as string | undefined) ?? null
   }
 
-  private onPointerMove = (event: PointerEvent) => {
-    if (event.pointerType === 'mouse') {
-      this.setPointer(event)
-      this.setHovered(this.pickObject())
-    }
-  }
-
-  private onPointerDown = (event: PointerEvent) => {
-    this.downAt = { x: event.clientX, y: event.clientY }
-  }
-
-  private onPointerUp = (event: PointerEvent) => {
-    if (Math.hypot(event.clientX - this.downAt.x, event.clientY - this.downAt.y) > 6) {
-      return
-    }
-    this.setPointer(event)
-    const slug = this.pickObject()
-    if (slug) {
-      this.options.onObjectClick(slug)
-      return
-    }
-    const point = this.raycaster.ray.intersectPlane(this.ground, new THREE.Vector3())
-    if (point && Math.hypot(point.x, point.z) < this.worldRadius) {
-      void this.startWalk(this.resolveCollisions(point), null)
-    }
-  }
-
-  private onPointerLeave = () => this.setHovered(null)
-
   private onKeyDown = (event: KeyboardEvent) => {
-    if (!(event.code in MOVE_KEYS) || isEditableTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey) {
+    if (!ALL_KEYS.has(event.code) || isEditableTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey) {
       return
     }
     event.preventDefault()
-    this.keys.add(event.code)
+    if (!this.locked) {
+      this.keys.add(event.code)
+    }
   }
 
   private onKeyUp = (event: KeyboardEvent) => {
@@ -803,56 +1041,6 @@ export class WorldScene {
     }
   }
 
-  private animate(dt: number, elapsed: number, speed: number) {
-    const still = !!this.options.reducedMotion
-    this.player.animate(dt, speed, elapsed, still)
-
-    for (const [slug, entry] of this.entries) {
-      const pulse = entry.object.animation === 'pulse' && !still ? 0.75 + Math.sin(elapsed * 2 + entry.phase) * 0.35 : 1
-      for (const material of entry.model.glowMaterials) {
-        material.userData.base ??= material.emissiveIntensity
-        material.emissiveIntensity = (material.userData.base as number) * pulse * ((material.userData.boost as number) ?? 1)
-      }
-      if (slug === this.zone && !still) {
-        ;(entry.zoneFill.material as THREE.MeshBasicMaterial).opacity = 0.1 + Math.sin(elapsed * 3) * 0.04
-      }
-      if (still) {
-        continue
-      }
-      if (entry.object.animation === 'floating') {
-        entry.body.position.y = Math.sin(elapsed * 1.1 + entry.phase) * 0.45 + 0.45
-      }
-      if (entry.object.animation === 'rotating') {
-        entry.body.rotation.y = elapsed * 0.35
-      }
-      for (const spinner of entry.model.spinners) {
-        spinner.rotation.y += dt * 0.25
-      }
-      for (const floater of entry.model.floaters) {
-        floater.userData.baseY ??= floater.position.y
-        floater.position.y = (floater.userData.baseY as number) + Math.sin(elapsed * 1.6 + entry.phase) * 0.25
-      }
-    }
-
-    if (this.marker.visible && !still) {
-      const scale = 1 + Math.sin(elapsed * 6) * 0.15
-      this.marker.scale.set(scale, scale, scale)
-    }
-
-    if (!still) {
-      this.scene.getObjectByName('island')?.children.forEach((child) => {
-        const float = child.userData.float as { base: number; phase: number } | undefined
-        if (float) {
-          child.position.y = float.base + Math.sin(elapsed * 0.6 + float.phase) * 0.8
-        }
-      })
-      const stars = this.scene.getObjectByName('stars')
-      if (stars) {
-        stars.rotation.y = elapsed * 0.004
-      }
-    }
-  }
-
   private loop = () => {
     if (this.disposed) {
       return
@@ -860,16 +1048,19 @@ export class WorldScene {
     this.frame = requestAnimationFrame(this.loop)
     const dt = Math.min(this.clock.getDelta(), 0.1)
     const elapsed = this.clock.elapsedTime
-    const speed = this.stepPlayer(dt)
-    this.followPlayer()
+    this.stepPlayer(dt)
     this.updateZone()
-    this.animate(dt, elapsed, speed)
-    this.controls.update()
-    if (this.composer) {
-      this.composer.render()
-    } else {
-      this.renderer.render(this.scene, this.camera)
+    this.player.animate(dt, this.moveSpeed, elapsed, !!this.options.reducedMotion)
+    this.updateCamera(dt)
+    if (!this.options.reducedMotion) {
+      this.clouds.position.x = ((elapsed * 0.6 + 80) % 160) - 80
+      if (this.marker.visible) {
+        this.marker.scale.setScalar(1 + Math.sin(elapsed * 6) * 0.15)
+      }
     }
+    this.sun.position.set(this.player.position.x + 28, 46, this.player.position.z + 18)
+    this.sun.target.position.copy(this.player.position)
+    this.renderer.render(this.scene, this.camera)
     this.labels.render(this.scene, this.camera)
   }
 
@@ -882,27 +1073,24 @@ export class WorldScene {
     this.camera.updateProjectionMatrix()
     this.renderer.setSize(width, height)
     this.labels.setSize(width, height)
-    this.composer?.setSize(width, height)
   }
 
   dispose() {
     this.disposed = true
     cancelAnimationFrame(this.frame)
-    this.cameraTween?.kill()
+    this.timeline?.kill()
     this.cancelWalk()
     this.resizeObserver.disconnect()
     window.removeEventListener('keydown', this.onKeyDown)
     window.removeEventListener('keyup', this.onKeyUp)
     window.removeEventListener('blur', this.onBlur)
     document.removeEventListener('visibilitychange', this.onVisibility)
-    this.controls.dispose()
     this.scene.traverse((node) => {
       const mesh = node as THREE.Mesh
       mesh.geometry?.dispose()
       const material = mesh.material as THREE.Material | THREE.Material[] | undefined
       ;(Array.isArray(material) ? material : material ? [material] : []).forEach((m) => m.dispose())
     })
-    this.composer?.dispose()
     this.renderer.dispose()
     this.renderer.domElement.remove()
     this.labels.domElement.remove()

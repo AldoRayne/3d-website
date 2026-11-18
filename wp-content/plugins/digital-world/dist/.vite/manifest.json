@@ -1,6 +1,6 @@
 {
   "node_modules/three/examples/jsm/loaders/GLTFLoader.js": {
-    "file": "assets/GLTFLoader-Dqh3s_zX.js",
+    "file": "assets/GLTFLoader-CwwGTpKa.js",
     "name": "GLTFLoader",
     "src": "node_modules/three/examples/jsm/loaders/GLTFLoader.js",
     "isDynamicEntry": true,
@@ -9,7 +9,7 @@
     ]
   },
   "src/main.ts": {
-    "file": "assets/main-Px_4heEf.js",
+    "file": "assets/main-e2dOGZ-5.js",
     "name": "main",
     "src": "src/main.ts",
     "isEntry": true,
@@ -17,7 +17,7 @@
       "node_modules/three/examples/jsm/loaders/GLTFLoader.js"
     ],
     "css": [
-      "assets/main-BSVOGNpm.css"
+      "assets/main-CpB-_jbP.css"
     ]
   }
 }
