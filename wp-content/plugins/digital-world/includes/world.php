@@ -53,6 +53,7 @@ function digital_world_get_objects() {
 function digital_world_format_object( WP_Post $post ) {
 	$type      = get_post_meta( $post->ID, 'dw_object_type', true );
 	$animation = get_post_meta( $post->ID, 'dw_animation', true );
+	$door      = get_post_meta( $post->ID, 'dw_door_side', true );
 	$color     = sanitize_hex_color( get_post_meta( $post->ID, 'dw_color', true ) );
 	$scale     = (float) get_post_meta( $post->ID, 'dw_scale', true );
 	$page_id   = (int) get_post_meta( $post->ID, 'dw_linked_page', true );
@@ -80,6 +81,7 @@ function digital_world_format_object( WP_Post $post ) {
 		'color'       => $color ?: '#3498db',
 		'animation'   => isset( DIGITAL_WORLD_ANIMATIONS[ $animation ] ) ? $animation : 'none',
 		'scale'       => $scale > 0 ? $scale : 1.0,
+		'door'        => isset( DIGITAL_WORLD_DOOR_SIDES[ $door ] ) ? $door : 'auto',
 		'position'    => array(
 			'x' => (float) get_post_meta( $post->ID, 'dw_position_x', true ),
 			'y' => (float) get_post_meta( $post->ID, 'dw_position_y', true ),

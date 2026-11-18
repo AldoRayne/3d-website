@@ -15,6 +15,14 @@ const DIGITAL_WORLD_TYPES = array(
 	'portal'   => 'Portal',
 );
 
+const DIGITAL_WORLD_DOOR_SIDES = array(
+	'auto'  => 'Auto (faces the island centre)',
+	'north' => 'North',
+	'east'  => 'East',
+	'south' => 'South',
+	'west'  => 'West',
+);
+
 const DIGITAL_WORLD_ANIMATIONS = array(
 	'none'     => 'None',
 	'floating' => 'Floating',
@@ -127,6 +135,15 @@ function digital_world_register_fields() {
 					'max'           => 5,
 					'step'          => 0.1,
 					'wrapper'       => array( 'width' => 25 ),
+				),
+				array(
+					'key'           => 'field_dw_door_side',
+					'name'          => 'dw_door_side',
+					'label'         => 'Door side',
+					'instructions'  => 'Which wall of the building has the entrance door.',
+					'type'          => 'select',
+					'choices'       => DIGITAL_WORLD_DOOR_SIDES,
+					'default_value' => 'auto',
 				),
 				array(
 					'key'           => 'field_dw_linked_page',
