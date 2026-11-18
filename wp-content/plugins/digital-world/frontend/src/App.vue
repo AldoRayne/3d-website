@@ -70,7 +70,6 @@ async function enter(slug: string) {
     prepare: async () => {
       await portalLoaded
       await nextTick()
-      portal.value?.classList.add('is-visible')
     },
     frame: (rect, progress) => {
       startCenter ??= { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
@@ -110,6 +109,7 @@ function drawPortal(rect: ScreenRect, progress: number, startCenter: { x: number
   wrapper.style.clipPath =
     progress >= 1 ? 'none' : `inset(${clip.top}px ${vw - clip.right}px ${vh - clip.bottom}px ${clip.left}px)`
   frame.style.transform = `translate(${cx - (vw * scale) / 2}px, ${cy - (vh * scale) / 2}px) scale(${scale})`
+  wrapper.classList.add('is-visible')
 }
 
 function onObjectClick(slug: string) {

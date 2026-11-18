@@ -1,6 +1,6 @@
 {
   "node_modules/three/examples/jsm/loaders/GLTFLoader.js": {
-    "file": "assets/GLTFLoader-CwwGTpKa.js",
+    "file": "assets/GLTFLoader-DtCV8W4i.js",
     "name": "GLTFLoader",
     "src": "node_modules/three/examples/jsm/loaders/GLTFLoader.js",
     "isDynamicEntry": true,
@@ -9,7 +9,7 @@
     ]
   },
   "src/main.ts": {
-    "file": "assets/main-e2dOGZ-5.js",
+    "file": "assets/main-BdmUAJkw.js",
     "name": "main",
     "src": "src/main.ts",
     "isEntry": true,
