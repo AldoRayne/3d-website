@@ -52,6 +52,7 @@ Commit the changed `composer.json` and `composer.lock` together.
   - `GET /wp-json/digital-world/v1/world` returns the object catalog.
   - `POST /wp-json/digital-world/v1/navigate` is the Navigator. It requires an `X-WP-Nonce` header and is limited to 20 requests per minute per IP.
 - Frontend: Vue 3, Three.js and GSAP, built with Vite into `dist/`. The world is served at `/digital-world/`. Every other page gets an **Enter Digital World** button. On a page that has a linked building, the button opens the world at that building (`?focus=<slug>`).
+- Visitors walk the island as a character. Desktop: arrow keys / WASD or click on the ground. Mobile: tap on the ground. Each building has an entry zone, shown as a ring around it. In a zone, the first Enter or click on the building opens the info panel, and the second Enter or the panel button opens the page. A click on a building outside its zone only shows a "come closer" hint. The section list and the Navigator walk the character to the zone.
 - AI Navigator: `claude-opus-5-5` with structured output `{reply, action, target, transition}`. The allowed actions are `navigate`, `open`, `overview` and `none`. `target` is restricted to slugs from the catalog, and the server checks it again before responding.
 
 ### Enabling Claude

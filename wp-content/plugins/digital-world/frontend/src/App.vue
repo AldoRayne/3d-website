@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import { boot, fetchWorld } from '@/api'
 import type { CameraTransition, NavigatorCommand, WorldObject } from '@/types'
-import { isWebGLAvailable, WorldScene } from '@/world/WorldScene'
+import { isEditableTarget, isWebGLAvailable, WorldScene } from '@/world/WorldScene'
 import ObjectList from '@/components/ObjectList.vue'
 import InfoPanel from '@/components/InfoPanel.vue'
 import NavigatorChat from '@/components/NavigatorChat.vue'
@@ -16,40 +16,98 @@ const aiEnabled = ref(boot.ai)
 const loading = ref(true)
 const error = ref('')
 const webgl = isWebGLAvailable()
-const focused = ref<string | null>(null)
-const selected = ref<string | null>(null)
+const touch = window.matchMedia('(pointer: coarse)').matches
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+const zone = ref<string | null>(null)
+const panel = ref<string | null>(null)
+const hint = ref('')
+let hintTimer = 0
 
-const selectedObject = computed(() => objects.value.find((object) => object.slug === selected.value) ?? null)
+const bySlug = (slug: string | null) => objects.value.find((object) => object.slug === slug) ?? null
+const zoneObject = computed(() => bySlug(zone.value))
+const panelObject = computed(() => bySlug(panel.value))
+const promptLabel = computed(() => {
+  if (!zoneObject.value || panel.value === zone.value) {
+    return ''
+  }
+  return touch ? `Відкрити «${zoneObject.value.title}»` : `відкрити «${zoneObject.value.title}»`
+})
 
-async function goTo(slug: string, { open = true, transition = 'fly' as CameraTransition } = {}) {
-  focused.value = slug
-  selected.value = open ? slug : null
-  await scene.value?.flyTo(slug, transition)
+function showHint(text: string, duration = 2600) {
+  hint.value = text
+  window.clearTimeout(hintTimer)
+  hintTimer = window.setTimeout(() => (hint.value = ''), duration)
+}
+
+function activate() {
+  const object = zoneObject.value
+  if (!object) {
+    return
+  }
+  if (panel.value !== object.slug) {
+    panel.value = object.slug
+  } else if (object.url) {
+    window.location.href = object.url
+  }
+}
+
+function onObjectClick(slug: string) {
+  if (zone.value === slug) {
+    activate()
+    return
+  }
+  const object = bySlug(slug)
+  if (object) {
+    showHint(`Підійдіть ближче до «${object.title}»`)
+  }
+}
+
+function onZoneChange(slug: string | null) {
+  zone.value = slug
+  if (panel.value && panel.value !== slug) {
+    panel.value = null
+  }
+}
+
+async function walkTo(slug: string, { open = false, transition = 'fly' as CameraTransition } = {}) {
+  const arrived = await scene.value?.walkTo(slug, transition)
+  if (arrived && open && zone.value === slug) {
+    panel.value = slug
+  }
 }
 
 function showOverview(transition: CameraTransition = 'fly') {
-  focused.value = null
-  selected.value = null
-  void scene.value?.overview(transition)
+  scene.value?.overview(transition)
 }
 
 function closePanel() {
-  selected.value = null
+  panel.value = null
 }
 
 function runCommand(command: NavigatorCommand) {
   const transition = command.camera.transition
   if ((command.action === 'navigate' || command.action === 'open') && command.target) {
-    void goTo(command.target, { open: command.action === 'open', transition })
+    void walkTo(command.target, { open: command.action === 'open', transition })
   } else if (command.action === 'overview') {
     showOverview(transition)
   }
 }
 
 function onKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape' && selected.value) {
+  if (event.key === 'Escape' && panel.value) {
     closePanel()
+    return
+  }
+  if (event.key !== 'Enter' || event.repeat || isEditableTarget(event.target)) {
+    return
+  }
+  const target = event.target as HTMLElement | null
+  if (target?.closest('button, a, [role="button"]')) {
+    return
+  }
+  if (zone.value) {
+    event.preventDefault()
+    activate()
   }
 }
 
@@ -62,15 +120,18 @@ onMounted(async () => {
     homeUrl.value = world.site.home
     aiEnabled.value = world.ai
     if (webgl && stage.value) {
-      scene.value = new WorldScene(stage.value, {
-        reducedMotion,
-        onSelect: (slug) => (slug ? void goTo(slug) : closePanel()),
-      })
+      scene.value = new WorldScene(stage.value, { reducedMotion, onObjectClick, onZoneChange })
       scene.value.setObjects(world.objects)
       const focus = new URLSearchParams(window.location.search).get('focus')
-      if (focus && world.objects.some((object) => object.slug === focus)) {
-        void goTo(focus, { transition: 'instant' })
+      if (focus && bySlug(focus)) {
+        void walkTo(focus, { transition: 'instant' })
       }
+      showHint(
+        touch
+          ? 'Тапніть по землі, щоб іти. Зайдіть у зону будівлі, щоб відкрити її.'
+          : 'Стрілки / WASD або клік по землі — йти. У зоні будівлі натисніть Enter.',
+        6000,
+      )
     }
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
@@ -81,6 +142,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
+  window.clearTimeout(hintTimer)
   scene.value?.dispose()
 })
 </script>
@@ -103,14 +165,27 @@ onBeforeUnmount(() => {
     <ObjectList
       v-if="objects.length"
       :objects="objects"
-      :active="focused"
+      :active="zone"
       :static-mode="!webgl"
-      @select="(slug) => goTo(slug)"
+      @select="(slug) => walkTo(slug)"
       @overview="showOverview()"
     />
 
     <div v-if="webgl && objects.length" class="dw-side">
-      <InfoPanel v-if="selectedObject" :object="selectedObject" @close="closePanel" />
+      <div class="dw-hud">
+        <p v-if="hint" class="dw-hint" role="status">{{ hint }}</p>
+        <button
+          v-if="zoneObject && promptLabel"
+          type="button"
+          class="dw-prompt"
+          :style="{ '--dw-accent': zoneObject.color }"
+          @click="activate"
+        >
+          <kbd v-if="!touch">Enter</kbd>
+          <span>{{ promptLabel }}</span>
+        </button>
+      </div>
+      <InfoPanel v-if="panelObject" :object="panelObject" :touch="touch" @close="closePanel" />
       <NavigatorChat :ai-enabled="aiEnabled" @command="runCommand" />
     </div>
 

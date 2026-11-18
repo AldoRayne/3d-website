@@ -632,6 +632,99 @@ button:disabled {
   color: var(--dw-primary);
 }
 
+.dw-label.is-zone {
+  color: #05070f;
+  background: var(--dw-accent);
+}
+
+kbd {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--dw-border-strong);
+  border-bottom-width: 2px;
+  background: rgba(5, 7, 15, 0.6);
+  font: 600 12px/1 var(--dw-font);
+  color: var(--dw-text);
+}
+
+.dw-hud {
+  position: fixed;
+  left: 50%;
+  bottom: var(--dw-gutter);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 10px;
+  width: max-content;
+  max-width: min(460px, calc(100% - 2 * var(--dw-gutter)));
+  pointer-events: none;
+}
+
+.dw-hud:empty {
+  display: none;
+}
+
+.dw-hud > * {
+  pointer-events: auto;
+}
+
+.dw-hint {
+  margin: 0;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: var(--dw-surface-strong);
+  border: 1px solid var(--dw-border);
+  font-size: 14px;
+  line-height: 1.4;
+  text-align: center;
+  color: #c4d0ea;
+  animation: dw-rise 0.25s ease-out;
+}
+
+.dw-prompt {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 20px 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--dw-accent);
+  background: rgba(5, 7, 15, 0.88);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--dw-accent) 40%, transparent);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  animation: dw-rise 0.25s ease-out;
+}
+
+.dw-prompt kbd {
+  border-color: var(--dw-accent);
+  color: var(--dw-accent);
+}
+
+.dw-prompt:hover {
+  background: color-mix(in srgb, var(--dw-accent) 16%, rgba(5, 7, 15, 0.9));
+}
+
+.dw-panel__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.dw-panel__hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--dw-muted);
+}
+
 @keyframes dw-rise {
   from {
     opacity: 0;
@@ -715,6 +808,19 @@ button:disabled {
   .dw-label {
     font-size: 12px;
     padding: 5px 10px;
+  }
+
+  .dw-hud {
+    position: static;
+    transform: none;
+    flex-direction: column;
+    width: 100%;
+    max-width: none;
+  }
+
+  .dw-prompt {
+    min-height: 52px;
+    padding: 0 22px;
   }
 }
 
