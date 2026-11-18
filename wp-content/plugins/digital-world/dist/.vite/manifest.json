@@ -1,0 +1,23 @@
+{
+  "node_modules/three/examples/jsm/loaders/GLTFLoader.js": {
+    "file": "assets/GLTFLoader-D8YMixzY.js",
+    "name": "GLTFLoader",
+    "src": "node_modules/three/examples/jsm/loaders/GLTFLoader.js",
+    "isDynamicEntry": true,
+    "imports": [
+      "src/main.ts"
+    ]
+  },
+  "src/main.ts": {
+    "file": "assets/main-BMUsza0H.js",
+    "name": "main",
+    "src": "src/main.ts",
+    "isEntry": true,
+    "dynamicImports": [
+      "node_modules/three/examples/jsm/loaders/GLTFLoader.js"
+    ],
+    "css": [
+      "assets/main-CwXTEPqs.css"
+    ]
+  }
+}
