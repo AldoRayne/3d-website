@@ -1,0 +1,54 @@
+{
+    "name": "aldorayne/3d-website",
+    "description": "WordPress site with the Digital World 3D mode",
+    "type": "project",
+    "license": "proprietary",
+    "repositories": [
+        {
+            "type": "composer",
+            "url": "https://wpackagist.org",
+            "only": [
+                "wpackagist-plugin/*",
+                "wpackagist-theme/*"
+            ]
+        }
+    ],
+    "require": {
+        "php": ">=8.1",
+        "composer/installers": "^2.3",
+        "roots/wordpress-core-installer": "^3.0",
+        "roots/wordpress-no-content": "7.1.5",
+        "wpackagist-plugin/advanced-custom-fields": "6.8.11",
+        "wpackagist-theme/twentytwentyfive": "*",
+        "anthropic-ai/sdk": "^1.10",
+        "guzzlehttp/guzzle": "^7.10"
+    },
+    "extra": {
+        "wordpress-install-dir": "wp",
+        "installer-paths": {
+            "wp-content/mu-plugins/{$name}/": [
+                "type:wordpress-muplugin"
+            ],
+            "wp-content/plugins/{$name}/": [
+                "type:wordpress-plugin"
+            ],
+            "wp-content/themes/{$name}/": [
+                "type:wordpress-theme"
+            ]
+        }
+    },
+    "config": {
+        "platform": {
+            "php": "8.2.4"
+        },
+        "optimize-autoloader": true,
+        "sort-packages": true,
+        "allow-plugins": {
+            "composer/installers": true,
+            "roots/wordpress-core-installer": true,
+            "php-http/discovery": false
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

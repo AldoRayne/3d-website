@@ -1,0 +1,11 @@
+/wp/
+/vendor/
+/wp-config-local.php
+
+/wp-content/*
+!/wp-content/plugins/
+/wp-content/plugins/*
+!/wp-content/plugins/digital-world/
+/wp-content/plugins/digital-world/frontend/node_modules/
+
+.DS_Store

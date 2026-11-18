@@ -1,0 +1,16 @@
+RedirectMatch 404 ^/(vendor|node_modules)(/|$)
+RedirectMatch 404 ^/(composer\.(json|lock)|wp-config(-local)?(\.sample)?\.php|README\.md|\.git.*)$
+RedirectMatch 404 ^/wp-content/plugins/digital-world/(frontend|includes)(/|$)
+
+# BEGIN WordPress
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteBase /
+RewriteRule ^wp-admin/?$ /wp/wp-admin/ [R=301,L]
+RewriteRule ^wp-login\.php$ /wp/wp-login.php [R=301,L,QSA]
+RewriteRule ^index\.php$ - [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.php [L]
+</IfModule>
+# END WordPress
