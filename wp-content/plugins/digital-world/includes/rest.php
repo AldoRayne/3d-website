@@ -112,18 +112,20 @@ function digital_world_register_routes() {
 	);
 }
 
-function digital_world_rest_world() {
-	return rest_ensure_response(
-		array(
-			'site'    => array(
-				'name' => get_bloginfo( 'name' ),
-				'home' => home_url( '/' ),
-			),
-			'ai'      => digital_world_ai_enabled(),
-			'island'  => array( 'radius' => digital_world_island_radius() ),
-			'objects' => digital_world_get_objects(),
-		)
+function digital_world_world_payload() {
+	return array(
+		'site'    => array(
+			'name' => get_bloginfo( 'name' ),
+			'home' => home_url( '/' ),
+		),
+		'ai'      => digital_world_ai_enabled(),
+		'island'  => array( 'radius' => digital_world_island_radius() ),
+		'objects' => digital_world_get_objects(),
 	);
+}
+
+function digital_world_rest_world() {
+	return rest_ensure_response( digital_world_world_payload() );
 }
 
 function digital_world_rest_navigate_permission( WP_REST_Request $request ) {

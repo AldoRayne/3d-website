@@ -45,6 +45,7 @@ function digital_world_boot_data() {
 		'homeUrl'  => home_url( '/' ),
 		'siteName' => get_bloginfo( 'name' ),
 		'ai'       => digital_world_ai_enabled(),
+		'world'    => digital_world_world_payload(),
 	);
 }
 
@@ -75,7 +76,7 @@ function digital_world_render_world() {
 	<link rel="stylesheet" href="<?php echo esc_url( DIGITAL_WORLD_URL . 'dist/' . $css ); ?>">
 		<?php endforeach; ?>
 	<?php endif; ?>
-	<script>window.DigitalWorld = <?php echo wp_json_encode( digital_world_boot_data() ); ?>;</script>
+	<script>window.DigitalWorld = <?php echo wp_json_encode( digital_world_boot_data(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE ); ?>;</script>
 </head>
 <body class="dw-body">
 	<div id="digital-world-app">

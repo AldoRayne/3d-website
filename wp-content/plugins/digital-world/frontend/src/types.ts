@@ -49,4 +49,5 @@ export interface BootData {
   homeUrl: string
   siteName: string
   ai: boolean
+  world?: WorldResponse
 }

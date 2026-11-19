@@ -43,6 +43,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export function fetchWorld(): Promise<WorldResponse> {
+  const inline = boot.world
+  if (inline) {
+    delete boot.world
+    return Promise.resolve(inline)
+  }
   return request<WorldResponse>('/world')
 }
 
