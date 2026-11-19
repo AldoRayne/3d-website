@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import { boot, fetchWorld } from '@/api'
 import type { CameraTransition, NavigatorCommand, WorldObject } from '@/types'
-import { isEditableTarget, isWebGLAvailable, WorldScene, type ScreenRect } from '@/world/WorldScene'
+import { isEditableTarget, isWebGLAvailable, WorldScene } from '@/world/WorldScene'
 import ObjectList from '@/components/ObjectList.vue'
 import DoorCard from '@/components/DoorCard.vue'
 import NavigatorChat from '@/components/NavigatorChat.vue'
@@ -22,13 +22,8 @@ const touch = window.matchMedia('(pointer: coarse)').matches
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 const zone = ref<string | null>(null)
 const entering = ref<string | null>(null)
-const portalUrl = ref<string | null>(null)
-const portal = ref<HTMLElement | null>(null)
-const portalFrame = ref<HTMLIFrameElement | null>(null)
 const hint = ref('')
 let hintTimer = 0
-let portalLoaded: Promise<void> = Promise.resolve()
-let markPortalLoaded = () => {}
 
 const bySlug = (slug: string | null) => objects.value.find((object) => object.slug === slug) ?? null
 const zoneObject = computed(() => (entering.value ? null : bySlug(zone.value)))
@@ -59,57 +54,10 @@ async function enter(slug: string) {
   const url = object.url
   entering.value = slug
   hint.value = ''
-  portalLoaded = new Promise<void>((resolve) => {
-    markPortalLoaded = resolve
-    window.setTimeout(resolve, 3000)
-  })
-  portalUrl.value = url
   storage((store) => store.setItem(LAST_DOOR_KEY, slug))
-  let startCenter: { x: number; y: number } | null = null
-  const entered = await scene.value.enter(slug, {
-    prepare: async () => {
-      await portalLoaded
-      await nextTick()
-    },
-    frame: (rect, progress) => {
-      startCenter ??= { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
-      drawPortal(rect, progress, startCenter)
-    },
-  })
-  if (entered) {
-    drawPortal({ x: 0, y: 0, width: window.innerWidth, height: window.innerHeight }, 1, null)
+  if (await scene.value.enter(slug, url)) {
     window.location.assign(url)
   }
-}
-
-function drawPortal(rect: ScreenRect, progress: number, startCenter: { x: number; y: number } | null) {
-  const wrapper = portal.value
-  const frame = portalFrame.value
-  if (!wrapper || !frame) {
-    return
-  }
-  const vw = window.innerWidth
-  const vh = window.innerHeight
-  const clip = {
-    left: Math.max(0, rect.x),
-    top: Math.max(0, rect.y),
-    right: Math.min(vw, rect.x + rect.width),
-    bottom: Math.min(vh, rect.y + rect.height),
-  }
-  const t = progress * progress
-  const from = startCenter ?? { x: vw / 2, y: vh / 2 }
-  const cx = from.x + (vw / 2 - from.x) * t
-  const cy = from.y + (vh / 2 - from.y) * t
-  const cover = Math.max(rect.height / vh, rect.width / vw)
-  const fill = Math.max(
-    (2 * Math.max(cx - clip.left, clip.right - cx)) / vw,
-    (2 * Math.max(cy - clip.top, clip.bottom - cy)) / vh,
-  )
-  const scale = progress >= 1 ? 1 : Math.max(cover + (1 - cover) * t, fill)
-  wrapper.style.clipPath =
-    progress >= 1 ? 'none' : `inset(${clip.top}px ${vw - clip.right}px ${vh - clip.bottom}px ${clip.left}px)`
-  frame.style.transform = `translate(${cx - (vw * scale) / 2}px, ${cy - (vh * scale) / 2}px) scale(${scale})`
-  wrapper.classList.add('is-visible')
 }
 
 function onObjectClick(slug: string) {
@@ -141,7 +89,6 @@ function runCommand(command: NavigatorCommand) {
 
 function restoreAtDoor(slug: string | null) {
   entering.value = null
-  portalUrl.value = null
   if (slug && bySlug(slug)) {
     scene.value?.placeAtDoor(slug)
   }
@@ -160,7 +107,12 @@ function onKeydown(event: KeyboardEvent) {
   if ((event.target as HTMLElement | null)?.closest('button, a, [role="button"]')) {
     return
   }
-  if (zone.value && !entering.value) {
+  if (entering.value) {
+    event.preventDefault()
+    scene.value?.hurry()
+    return
+  }
+  if (zone.value) {
     event.preventDefault()
     void enter(zone.value)
   }
@@ -237,17 +189,6 @@ onBeforeUnmount(() => {
       </div>
       <DoorCard v-if="zoneObject" :object="zoneObject" :touch="touch" @enter="enter(zoneObject.slug)" />
       <NavigatorChat :ai-enabled="aiEnabled" @command="runCommand" />
-    </div>
-
-    <div v-if="portalUrl" ref="portal" class="dw-portal" aria-hidden="true">
-      <iframe
-        ref="portalFrame"
-        :src="portalUrl"
-        title=""
-        tabindex="-1"
-        loading="eager"
-        @load="markPortalLoaded()"
-      />
     </div>
 
     <div v-if="loading" class="dw-status" role="status">

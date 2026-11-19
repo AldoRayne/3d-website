@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "gsap": "^3.15.1",
+    "modern-screenshot": "4.7.0",
     "three": "^0.187.0",
     "vue": "^3.5.45"
   },

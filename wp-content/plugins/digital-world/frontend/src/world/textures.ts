@@ -170,6 +170,19 @@ const painters: Record<string, (ctx: Ctx, rnd: Random, arg: string) => void> = {
     ctx.fillRect(0, 0, 2, SIZE)
     ctx.fillRect(SIZE - 2, 0, 2, SIZE)
   },
+  paper(ctx, rnd) {
+    noise(ctx, rnd, ['#f4ecd9', '#f1e8d3', '#f6efdf'])
+    ctx.fillStyle = '#e4d8bd'
+    for (let y = 3; y < SIZE - 1; y += 3) {
+      ctx.fillRect(2, y, SIZE - 4, 1)
+    }
+  },
+  pageEdge(ctx) {
+    for (let y = 0; y < SIZE; y++) {
+      ctx.fillStyle = y % 2 ? '#d8ccb0' : '#f2e9d5'
+      ctx.fillRect(0, y, SIZE, 1)
+    }
+  },
   cloud(ctx, rnd) {
     noise(ctx, rnd, ['#ffffff', '#f6f8fb', '#eef2f7'])
   },

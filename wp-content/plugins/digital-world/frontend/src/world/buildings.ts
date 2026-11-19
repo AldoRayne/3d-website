@@ -52,7 +52,7 @@ export function randomSeed() {
   return 1 + Math.floor(Math.random() * (MAX_SEED - 1))
 }
 
-function random(seed: number) {
+export function seededRandom(seed: number) {
   let a = seed >>> 0
   return () => {
     a = (a + 0x6d2b79f5) >>> 0
@@ -78,7 +78,7 @@ function pick<T>(rnd: () => number, items: readonly T[], weights?: readonly numb
 }
 
 export function specFromSeed(seed: number): BuildingSpec {
-  const rnd = random(seed)
+  const rnd = seededRandom(seed)
   const floors = pick(rnd, [1, 2, 3, 4], [3, 4, 2, 1])
   const tall = floors >= 3
   const halfX = tall ? pick(rnd, [2, 3]) : pick(rnd, [2, 3, 3, 4])

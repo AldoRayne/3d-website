@@ -70,6 +70,7 @@ input {
 }
 
 .dw-canvas {
+  position: relative;
   display: block;
   touch-action: none;
 }
@@ -685,26 +686,24 @@ kbd {
   color: var(--dw-muted);
 }
 
-.dw-portal {
-  position: fixed;
+.dw-pages {
+  position: absolute;
   inset: 0;
-  z-index: 50;
-  overflow: hidden;
-  visibility: hidden;
   pointer-events: none;
 }
 
-.dw-portal.is-visible {
-  visibility: visible;
-}
-
-.dw-portal iframe {
+.dw-page {
   display: block;
-  width: 100vw;
-  height: 100vh;
   border: 0;
   background: #fff;
-  transform-origin: 0 0;
+}
+
+.dw-veil {
+  position: absolute;
+  inset: 0;
+  background: #fff4cf;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .dw-app.is-entering .dw-topbar,

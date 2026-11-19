@@ -1,27 +1,33 @@
 {
-  "_WorldModel-C_YE28DS.js": {
-    "file": "assets/WorldModel-C_YE28DS.js",
+  "_WorldModel-CyBa6XD5.js": {
+    "file": "assets/WorldModel-CyBa6XD5.js",
     "name": "WorldModel",
     "imports": [
-      "_buildings-D92DSDqU.js"
+      "_buildings-BRy7GBmf.js"
     ]
   },
-  "_buildings-D92DSDqU.js": {
-    "file": "assets/buildings-D92DSDqU.js",
+  "_buildings-BRy7GBmf.js": {
+    "file": "assets/buildings-BRy7GBmf.js",
     "name": "buildings"
   },
   "_preview-CDxcuptg.js": {
     "file": "assets/preview-CDxcuptg.js",
     "name": "preview"
   },
+  "node_modules/modern-screenshot/dist/index.mjs": {
+    "file": "assets/dist-DyVmH21U.js",
+    "name": "dist",
+    "src": "node_modules/modern-screenshot/dist/index.mjs",
+    "isDynamicEntry": true
+  },
   "src/admin.ts": {
-    "file": "assets/admin-Dnm6SkvE.js",
+    "file": "assets/admin-C5Fo1Hp3.js",
     "name": "admin",
     "src": "src/admin.ts",
     "isEntry": true,
     "imports": [
-      "_WorldModel-C_YE28DS.js",
-      "_buildings-D92DSDqU.js",
+      "_WorldModel-CyBa6XD5.js",
+      "_buildings-BRy7GBmf.js",
       "_preview-CDxcuptg.js"
     ],
     "css": [
@@ -29,12 +35,12 @@
     ]
   },
   "src/building-meta.ts": {
-    "file": "assets/building--_u9xwy1.js",
+    "file": "assets/building-CT9zRgpz.js",
     "name": "building",
     "src": "src/building-meta.ts",
     "isEntry": true,
     "imports": [
-      "_buildings-D92DSDqU.js",
+      "_buildings-BRy7GBmf.js",
       "_preview-CDxcuptg.js"
     ],
     "css": [
@@ -42,16 +48,19 @@
     ]
   },
   "src/main.ts": {
-    "file": "assets/main-DL8Wvh1Y.js",
+    "file": "assets/main-DEqKruEb.js",
     "name": "main",
     "src": "src/main.ts",
     "isEntry": true,
     "imports": [
-      "_WorldModel-C_YE28DS.js",
-      "_buildings-D92DSDqU.js"
+      "_WorldModel-CyBa6XD5.js",
+      "_buildings-BRy7GBmf.js"
+    ],
+    "dynamicImports": [
+      "node_modules/modern-screenshot/dist/index.mjs"
     ],
     "css": [
-      "assets/main-CpB-_jbP.css"
+      "assets/main-pSXckMpa.css"
     ]
   }
 }

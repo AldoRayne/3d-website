@@ -1,20 +1,15 @@
 import * as THREE from 'three'
 import gsap from 'gsap'
 import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js'
+import { CSS3DRenderer } from 'three/addons/renderers/CSS3DRenderer.js'
 import type { CameraTransition, WorldObject } from '@/types'
 import { isEditableTarget } from './dom'
 import { pushOut } from './navigation'
+import { Interior, PRINT_OPACITY, SHEET_COUNT, snapshotPage } from './interior'
 import { Player, PLAYER_RADIUS } from './Player'
 import { WorldModel, type Building } from './WorldModel'
 
 export { isEditableTarget, isWebGLAvailable } from './dom'
-
-export interface ScreenRect {
-  x: number
-  y: number
-  width: number
-  height: number
-}
 
 interface Walk {
   points: THREE.Vector2[]
@@ -40,6 +35,10 @@ const KEYS = {
 }
 const ALL_KEYS = new Set(Object.values(KEYS).flat())
 
+function wait(ms: number) {
+  return new Promise<null>((resolve) => window.setTimeout(() => resolve(null), ms))
+}
+
 function headingOf(direction: THREE.Vector3) {
   return Math.atan2(direction.x, direction.z)
 }
@@ -47,7 +46,13 @@ function headingOf(direction: THREE.Vector3) {
 export class WorldScene {
   private renderer: THREE.WebGLRenderer
   private labels: CSS2DRenderer
+  private pages: CSS3DRenderer
+  private veil: HTMLDivElement
   private scene = new THREE.Scene()
+  private activeScene: THREE.Scene = this.scene
+  private interior: Interior | null = null
+  private finish: (() => void) | null = null
+  private speed = 1
   private camera: THREE.PerspectiveCamera
   private timer = new THREE.Timer()
   private raycaster = new THREE.Raycaster()
@@ -85,7 +90,12 @@ export class WorldScene {
     const { clientWidth: width, clientHeight: height } = container
     this.shadows = !this.lowPower
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
+    this.pages = new CSS3DRenderer()
+    this.pages.setSize(width, height)
+    this.pages.domElement.classList.add('dw-pages')
+    container.appendChild(this.pages.domElement)
+
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' })
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     this.renderer.setSize(width, height)
     this.renderer.shadowMap.enabled = this.shadows
@@ -97,6 +107,10 @@ export class WorldScene {
     this.labels.setSize(width, height)
     this.labels.domElement.classList.add('dw-labels')
     container.appendChild(this.labels.domElement)
+
+    this.veil = document.createElement('div')
+    this.veil.className = 'dw-veil'
+    container.appendChild(this.veil)
 
     this.camera = new THREE.PerspectiveCamera(55, width / height, 0.1, 500)
     this.distance = this.defaultDistance
@@ -219,7 +233,7 @@ export class WorldScene {
     if (!entry) {
       return
     }
-    this.timeline?.kill()
+    this.leaveInterior()
     this.resetDoor(entry)
     this.cancelWalk()
     this.locked = false
@@ -420,25 +434,71 @@ export class WorldScene {
     ;(entry.door.glow.material as THREE.MeshBasicMaterial).opacity = 0
   }
 
-  private apertureRect(entry: Building): ScreenRect {
-    const lateral = new THREE.Vector3(entry.door.outward.z, 0, -entry.door.outward.x)
-    const bounds = this.container.getBoundingClientRect()
-    const xs: number[] = []
-    const ys: number[] = []
-    this.camera.updateMatrixWorld()
-    for (const side of [-0.5, 0.5]) {
-      for (const y of [0, 2]) {
-        const point = entry.door.world.clone().addScaledVector(lateral, side).setY(y).project(this.camera)
-        xs.push(bounds.left + ((point.x + 1) / 2) * bounds.width)
-        ys.push(bounds.top + ((1 - point.y) / 2) * bounds.height)
-      }
-    }
-    const x = Math.min(...xs)
-    const y = Math.min(...ys)
-    return { x, y, width: Math.max(1, Math.max(...xs) - x), height: Math.max(1, Math.max(...ys) - y) }
+  private openPage(url: string) {
+    const { clientWidth: width, clientHeight: height } = this.container
+    const frame = document.createElement('iframe')
+    frame.src = url
+    frame.title = ''
+    frame.tabIndex = -1
+    frame.className = 'dw-page'
+    frame.style.width = `${width}px`
+    frame.style.height = `${height}px`
+    const loaded = new Promise<void>((resolve) => {
+      frame.addEventListener('load', () => resolve(), { once: true })
+      window.setTimeout(resolve, 4000)
+    })
+    return { frame, width, height, loaded }
   }
 
-  enter(slug: string, portal: { prepare: () => Promise<void>; frame: (rect: ScreenRect, progress: number) => void }) {
+  private play(timeline: gsap.core.Timeline) {
+    return new Promise<boolean>((resolve) => {
+      this.finish = () => resolve(false)
+      this.timeline = timeline
+      timeline.timeScale(this.speed)
+      timeline.eventCallback('onComplete', () => {
+        this.finish = null
+        resolve(true)
+      })
+    })
+  }
+
+  private waitFor(promise: Promise<void>) {
+    return new Promise<boolean>((resolve) => {
+      this.finish = () => resolve(false)
+      void promise.then(() => {
+        this.finish = null
+        resolve(true)
+      })
+    })
+  }
+
+  private stopCinematic() {
+    this.timeline?.kill()
+    this.timeline = null
+    const finish = this.finish
+    this.finish = null
+    finish?.()
+  }
+
+  private leaveInterior() {
+    this.stopCinematic()
+    if (this.interior) {
+      this.scene.add(this.player.root)
+      this.interior.dispose()
+      this.interior = null
+    }
+    this.activeScene = this.scene
+    this.veil.style.opacity = '0'
+  }
+
+  hurry() {
+    if (this.locked && this.interior) {
+      this.speed = 4
+      this.timeline?.timeScale(this.speed)
+    }
+  }
+
+  enter(slug: string, url: string) {
     const entry = this.model.buildings.get(slug)
     if (!entry || this.locked) {
       return Promise.resolve(false)
@@ -446,25 +506,54 @@ export class WorldScene {
     this.locked = true
     this.cancelWalk()
     this.keys.clear()
+    if (this.options.reducedMotion) {
+      return Promise.resolve(true)
+    }
+    this.leaveInterior()
+    this.speed = 1
+    const page = this.openPage(url)
+    const interior = new Interior(entry.object, page.width / page.height, page.frame, page.height)
+    this.interior = interior
+    const ready = page.loaded
+      .then(() => (interior.book.spread ? Promise.race([snapshotPage(page.frame, page.width, page.height), wait(3000)]) : null))
+      .then((image) => {
+        if (image) {
+          interior.book.setPageImage(image)
+        }
+      })
+      .catch(() => undefined)
+    return this.playEntry(entry, ready)
+  }
+
+  private async playEntry(entry: Building, loaded: Promise<void>) {
+    const interior = this.interior as Interior
+    const steps = [
+      () => this.play(this.doorTimeline(entry)),
+      () => {
+        this.stepInside(interior)
+        return this.play(this.walkTimeline(interior))
+      },
+      () => this.waitFor(loaded),
+      () => this.play(this.bookTimeline(interior)),
+    ]
+    for (const step of steps) {
+      if (!(await step()) || this.interior !== interior) {
+        return false
+      }
+    }
+    return true
+  }
+
+  private doorTimeline(entry: Building) {
     const { door } = entry
+    const player = this.player
     const inward = door.outward.clone().negate()
     const doorHeading = headingOf(inward)
-
-    if (this.options.reducedMotion) {
-      door.pivot.rotation.y = 1.8
-      return portal.prepare().then(() => {
-        portal.frame(this.apertureRect(entry), 1)
-        return true
-      })
-    }
-
-    const player = this.player
     const start = player.position.clone()
     const right = new THREE.Vector3().crossVectors(inward, UP).normalize()
     const doorCenter = door.world.clone().setY(1)
     const portrait = this.camera.aspect < 1 ? 1.6 : 1
     const shoulder = door.world.clone().addScaledVector(door.outward, 4.2 * portrait).addScaledVector(right, 0.65).setY(2.2 + (portrait - 1))
-    const approach = door.world.clone().addScaledVector(door.outward, 3.1 * portrait).setY(1.15)
     const through = door.world.clone().addScaledVector(door.outward, 0.25).setY(1)
     const inside = door.world.clone().addScaledVector(inward, 1.2)
     const cameraFrom = this.camera.position.clone()
@@ -472,104 +561,215 @@ export class WorldScene {
     this.cinematicLook.copy(lookFrom)
     this.mode = 'cinematic'
 
-    const state = { approach: 0, camera: 0, reach: 0, door: 0, walkIn: 0, dolly: 0, push: 0 }
+    const state = { approach: 0, camera: 0, reach: 0, door: 0, walkIn: 0, push: 0 }
     const startHeading = player.heading
     const turn = Math.atan2(Math.sin(doorHeading - startHeading), Math.cos(doorHeading - startHeading))
     const approachTime = Math.min(0.8, start.distanceTo(door.front) / WALK_SPEED)
 
-    return new Promise<boolean>((resolve) => {
-      const tl = gsap.timeline()
-      this.timeline = tl
-      tl.to(state, {
-        approach: 1,
-        duration: Math.max(approachTime, 0.3),
-        ease: 'power1.inOut',
+    const tl = gsap.timeline()
+    tl.to(state, {
+      approach: 1,
+      duration: Math.max(approachTime, 0.3),
+      ease: 'power1.inOut',
+      onUpdate: () => {
+        player.position.lerpVectors(start, door.front, state.approach)
+        player.heading = startHeading + turn * state.approach
+        this.moveSpeed = approachTime > 0.05 ? WALK_SPEED : 0
+      },
+      onComplete: () => {
+        this.moveSpeed = 0
+      },
+    })
+    tl.to(
+      state,
+      {
+        camera: 1,
+        duration: 0.9,
+        ease: 'power2.inOut',
         onUpdate: () => {
-          player.position.lerpVectors(start, door.front, state.approach)
-          player.heading = startHeading + turn * state.approach
-          this.moveSpeed = approachTime > 0.05 ? WALK_SPEED : 0
+          const arc = Math.sin(Math.PI * state.camera)
+          this.camera.position
+            .lerpVectors(cameraFrom, shoulder, state.camera)
+            .addScaledVector(right, arc * 1.6)
+            .add(new THREE.Vector3(0, arc * 1.4, 0))
+          this.cinematicLook.lerpVectors(lookFrom, doorCenter, state.camera)
+        },
+      },
+      0,
+    )
+    tl.to(state, { reach: 1, duration: 0.25, onUpdate: () => player.reach(state.reach) })
+    tl.to(state, {
+      door: 1,
+      duration: 0.55,
+      ease: 'power2.out',
+      onUpdate: () => {
+        door.pivot.rotation.y = state.door * 1.8
+        ;(door.glow.material as THREE.MeshBasicMaterial).opacity = state.door
+      },
+    })
+    tl.to(state, { reach: 0, duration: 0.25, onUpdate: () => player.reach(state.reach) }, '-=0.15')
+    tl.to(
+      state,
+      {
+        walkIn: 1,
+        duration: 0.8,
+        ease: 'none',
+        onUpdate: () => {
+          player.position.lerpVectors(door.front, inside, state.walkIn)
+          this.moveSpeed = WALK_SPEED * 0.8
+          player.root.visible = state.walkIn < 0.8
         },
         onComplete: () => {
           this.moveSpeed = 0
         },
-      })
-      tl.to(
-        state,
-        {
-          camera: 1,
-          duration: 0.9,
-          ease: 'power2.inOut',
-          onUpdate: () => {
-            const arc = Math.sin(Math.PI * state.camera)
-            this.camera.position
-              .lerpVectors(cameraFrom, shoulder, state.camera)
-              .addScaledVector(right, arc * 1.6)
-              .add(new THREE.Vector3(0, arc * 1.4, 0))
-            this.cinematicLook.lerpVectors(lookFrom, doorCenter, state.camera)
-          },
-        },
-        0,
-      )
-      tl.to(state, { reach: 1, duration: 0.25, onUpdate: () => player.reach(state.reach) })
-      tl.to(state, {
-        door: 1,
-        duration: 0.6,
-        ease: 'power2.out',
+      },
+      '-=0.05',
+    )
+    tl.to(
+      state,
+      {
+        push: 1,
+        duration: 1,
+        ease: 'power2.in',
         onUpdate: () => {
-          door.pivot.rotation.y = state.door * 1.8
-          ;(door.glow.material as THREE.MeshBasicMaterial).opacity = state.door
+          this.camera.position.lerpVectors(shoulder, through, state.push)
+          this.cinematicLook.copy(doorCenter).addScaledVector(inward, state.push * 1.5)
+          this.veil.style.opacity = String(THREE.MathUtils.smoothstep(state.push, 0.45, 1))
         },
-      })
-      tl.to(state, { reach: 0, duration: 0.25, onUpdate: () => player.reach(state.reach) }, '-=0.15')
-      tl.to(
-        state,
-        {
-          walkIn: 1,
-          duration: 0.95,
-          ease: 'none',
-          onUpdate: () => {
-            player.position.lerpVectors(door.front, inside, state.walkIn)
-            this.moveSpeed = WALK_SPEED * 0.8
-            player.root.visible = state.walkIn < 0.8
-          },
-          onComplete: () => {
-            this.moveSpeed = 0
-          },
+      },
+      '<0.3',
+    )
+    return tl
+  }
+
+  private stepInside(interior: Interior) {
+    this.activeScene = interior.scene
+    interior.scene.add(this.player.root)
+    this.player.root.visible = true
+    this.player.reach(0)
+    this.player.position.copy(interior.entry)
+    this.player.heading = Math.PI
+    this.camera.position.copy(interior.doorway)
+    this.cinematicLook.copy(interior.entry).add(new THREE.Vector3(0, 1.3, -3))
+  }
+
+  private bookPose(interior: Interior, distance: number) {
+    const center = interior.book.contentCenter()
+    return { position: center.clone().addScaledVector(interior.book.normal(), distance), center }
+  }
+
+  private fillDistance(interior: Interior) {
+    return interior.book.pageHeight / 2 / Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)
+  }
+
+  private walkTimeline(interior: Interior) {
+    const player = this.player
+    const start = interior.entry.clone()
+    const stand = interior.stand.clone()
+    const walkTime = start.distanceTo(stand) / 3.6
+    const doorway = interior.doorway.clone()
+    const doorLook = this.cinematicLook.clone()
+    const follow = this.camera.aspect < 1 ? new THREE.Vector3(0.3, 2.9, 3.2) : new THREE.Vector3(0.5, 2.45, 2.3)
+    const ahead = new THREE.Vector3(0, 1.3, -2.4)
+    const view = this.bookPose(interior, this.fillDistance(interior) * 2.2)
+    const state = { veil: 1, walk: 0, frame: 0, reach: 0 }
+    const cameraFrom = new THREE.Vector3()
+    const lookFrom = new THREE.Vector3()
+
+    const tl = gsap.timeline()
+    tl.to(state, { veil: 0, duration: 0.45, ease: 'power1.out', onUpdate: () => (this.veil.style.opacity = String(state.veil)) }, 0)
+    tl.to(
+      state,
+      {
+        walk: 1,
+        duration: walkTime,
+        ease: 'sine.out',
+        onUpdate: () => {
+          player.position.lerpVectors(start, stand, state.walk)
+          this.moveSpeed = WALK_SPEED * 0.7 * (1 - state.walk * 0.6)
+          const blend = THREE.MathUtils.smoothstep(state.walk, 0, 0.35)
+          this.camera.position.lerpVectors(doorway, player.position.clone().add(follow), blend)
+          this.camera.position.z = Math.min(this.camera.position.z, THREE.MathUtils.lerp(doorway.z, interior.backWall, blend))
+          this.cinematicLook.lerpVectors(doorLook, player.position.clone().add(ahead), blend)
         },
-        '-=0.05',
-      )
-      tl.to(
-        state,
-        {
-          dolly: 1,
-          duration: 1,
-          ease: 'power1.inOut',
-          onUpdate: () => {
-            this.camera.position.lerpVectors(shoulder, approach, state.dolly)
-          },
+        onComplete: () => {
+          this.moveSpeed = 0
         },
-        '<0.2',
-      )
-      tl.add(() => {
-        void portal.prepare().then(() => {
-          this.timeline = gsap.timeline().to(state, {
-            push: 1,
-            duration: 1.15,
-            ease: 'power2.in',
-            onUpdate: () => {
-              this.camera.position.lerpVectors(approach, through, state.push)
-              this.cinematicLook.copy(doorCenter).addScaledVector(inward, state.push * 1.5)
-              this.camera.lookAt(this.cinematicLook)
-              portal.frame(this.apertureRect(entry), state.push)
-            },
-            onComplete: () => resolve(true),
-          })
-        })
-      })
+      },
+      0,
+    )
+    tl.to(state, { reach: 1, duration: 0.4, onUpdate: () => player.reach(state.reach) }, walkTime - 0.2)
+    tl.to(
+      state,
+      {
+        frame: 1,
+        duration: 1.1,
+        ease: 'power2.inOut',
+        onStart: () => {
+          cameraFrom.copy(this.camera.position)
+          lookFrom.copy(this.cinematicLook)
+        },
+        onUpdate: () => {
+          const arc = Math.sin(Math.PI * state.frame)
+          this.camera.position.lerpVectors(cameraFrom, view.position, state.frame).add(new THREE.Vector3(arc * 0.55, arc * 0.45, 0))
+          this.cinematicLook.lerpVectors(lookFrom, view.center, state.frame)
+        },
+      },
+      walkTime - 0.35,
+    )
+    return tl
+  }
+
+  private bookTimeline(interior: Interior) {
+    const { book } = interior
+    const fill = this.fillDistance(interior)
+    const near = this.bookPose(interior, fill * 1.75)
+    const final = this.bookPose(interior, fill)
+    const from = this.camera.position.clone()
+    const state = { cover: 0, reach: 1, reveal: 0, drift: 0, push: 0, sheets: Array.from({ length: SHEET_COUNT }, () => 0) }
+    const tl = gsap.timeline()
+    tl.to(state, { cover: 1, duration: 0.75, ease: 'power2.inOut', onUpdate: () => book.setCover(state.cover) }, 0)
+    tl.to(state, { reach: 0, duration: 0.35, onUpdate: () => this.player.reach(state.reach) }, 0.25)
+    tl.to(
+      state,
+      {
+        drift: 1,
+        duration: 1.7,
+        ease: 'sine.inOut',
+        onUpdate: () => {
+          this.camera.position.lerpVectors(from, near.position, state.drift)
+          this.cinematicLook.copy(near.center)
+        },
+      },
+      0,
+    )
+    state.sheets.forEach((_, index) => {
+      const sheet = { t: 0 }
+      tl.to(sheet, { t: 1, duration: 0.6, ease: 'power1.inOut', onUpdate: () => book.setSheet(index, sheet.t) }, 0.5 + index * 0.24)
     })
+    const lastSheet = 0.5 + (state.sheets.length - 1) * 0.24
+    tl.to(state, { reveal: 1, duration: 0.45, ease: 'power1.inOut', onUpdate: () => book.setReveal(state.reveal) }, lastSheet + 0.65)
+    tl.to(
+      state,
+      {
+        push: 1,
+        duration: 0.9,
+        ease: 'power2.inOut',
+        onUpdate: () => {
+          this.camera.position.lerpVectors(near.position, final.position, state.push)
+          this.cinematicLook.copy(final.center)
+          book.setPrint(PRINT_OPACITY * (1 - state.push))
+        },
+      },
+      Math.max(1.7, lastSheet + 1.1),
+    )
+    return tl
   }
 
   private onPointerDown = (event: PointerEvent) => {
+    if (this.locked) {
+      this.hurry()
+    }
     if (!this.drag) {
       this.drag = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false }
     }
@@ -687,8 +887,13 @@ export class WorldScene {
     }
     this.sun.position.set(this.player.position.x + 28, 46, this.player.position.z + 18)
     this.sun.target.position.copy(this.player.position)
-    this.renderer.render(this.scene, this.camera)
-    this.labels.render(this.scene, this.camera)
+    this.renderer.render(this.activeScene, this.camera)
+    if (this.activeScene === this.scene) {
+      this.labels.render(this.scene, this.camera)
+    }
+    if (this.interior) {
+      this.pages.render(this.interior.scene, this.camera)
+    }
   }
 
   resize() {
@@ -700,12 +905,13 @@ export class WorldScene {
     this.camera.updateProjectionMatrix()
     this.renderer.setSize(width, height)
     this.labels.setSize(width, height)
+    this.pages.setSize(width, height)
   }
 
   dispose() {
     this.disposed = true
     cancelAnimationFrame(this.frame)
-    this.timeline?.kill()
+    this.leaveInterior()
     this.cancelWalk()
     this.resizeObserver.disconnect()
     window.removeEventListener('keydown', this.onKeyDown)
@@ -721,5 +927,7 @@ export class WorldScene {
     this.renderer.dispose()
     this.renderer.domElement.remove()
     this.labels.domElement.remove()
+    this.pages.domElement.remove()
+    this.veil.remove()
   }
 }
