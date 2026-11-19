@@ -23,7 +23,6 @@ require_once DIGITAL_WORLD_DIR . 'includes/navigator.php';
 require_once DIGITAL_WORLD_DIR . 'includes/rest.php';
 require_once DIGITAL_WORLD_DIR . 'includes/frontend.php';
 require_once DIGITAL_WORLD_DIR . 'includes/admin.php';
-require_once DIGITAL_WORLD_DIR . 'includes/pages.php';
 require_once DIGITAL_WORLD_DIR . 'includes/seed.php';
 
 register_activation_hook( __FILE__, 'digital_world_install' );
