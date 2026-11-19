@@ -1,6 +1,6 @@
 {
-  "_WorldModel-DlQI2yYQ.js": {
-    "file": "assets/WorldModel-DlQI2yYQ.js",
+  "_WorldModel-CdO0YQfO.js": {
+    "file": "assets/WorldModel-CdO0YQfO.js",
     "name": "WorldModel",
     "imports": [
       "_buildings-BRy7GBmf.js"
@@ -21,18 +21,30 @@
     "isDynamicEntry": true
   },
   "src/admin.ts": {
-    "file": "assets/admin-Blmp7L4q.js",
+    "file": "assets/admin-D93wtmym.js",
     "name": "admin",
     "src": "src/admin.ts",
     "isEntry": true,
     "imports": [
-      "_WorldModel-DlQI2yYQ.js",
+      "_WorldModel-CdO0YQfO.js",
       "_buildings-BRy7GBmf.js",
       "_preview-CDxcuptg.js"
     ],
     "css": [
       "assets/admin-WEr3Wm2r.css"
     ]
+  },
+  "src/assets/fonts/manrope-300.json": {
+    "file": "assets/manrope-300-DNp6adrr.json",
+    "src": "src/assets/fonts/manrope-300.json"
+  },
+  "src/assets/fonts/manrope-400.json": {
+    "file": "assets/manrope-400-Dz9QArRn.json",
+    "src": "src/assets/fonts/manrope-400.json"
+  },
+  "src/assets/fonts/manrope-700.json": {
+    "file": "assets/manrope-700-cR7cJvgw.json",
+    "src": "src/assets/fonts/manrope-700.json"
   },
   "src/building-meta.ts": {
     "file": "assets/building-CT9zRgpz.js",
@@ -48,28 +60,24 @@
     ]
   },
   "src/main.ts": {
-    "file": "assets/main-1eXLUuNE.js",
+    "file": "assets/main-BbFVuzLv.js",
     "name": "main",
     "src": "src/main.ts",
     "isEntry": true,
     "imports": [
-      "_WorldModel-DlQI2yYQ.js",
+      "_WorldModel-CdO0YQfO.js",
       "_buildings-BRy7GBmf.js"
     ],
     "dynamicImports": [
       "node_modules/modern-screenshot/dist/index.mjs"
     ],
     "css": [
-      "assets/main-pSXckMpa.css"
-    ]
-  },
-  "src/page.ts": {
-    "file": "assets/page-Dc7kFylr.js",
-    "name": "page",
-    "src": "src/page.ts",
-    "isEntry": true,
-    "css": [
-      "assets/page-DCli5XSV.css"
+      "assets/main-ws_YOlOw.css"
+    ],
+    "assets": [
+      "assets/manrope-300-DNp6adrr.json",
+      "assets/manrope-400-Dz9QArRn.json",
+      "assets/manrope-700-cR7cJvgw.json"
     ]
   }
 }
