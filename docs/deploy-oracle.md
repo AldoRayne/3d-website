@@ -76,7 +76,7 @@ sudo apt update && sudo apt -y upgrade
 sudo apt -y install apache2 mariadb-server \
   php libapache2-mod-php php-mysql php-curl php-mbstring php-xml php-zip php-gd php-intl \
   composer git unzip certbot python3-certbot-apache
-sudo a2enmod rewrite
+sudo a2enmod rewrite headers deflate
 ```
 
 На Ubuntu 24.04 встановиться PHP 8.3. Проєкт працює на PHP 8.1 і новіших: `platform` у `composer.json` лише фіксує версії залежностей.
@@ -167,7 +167,7 @@ sudo apache2ctl configtest && sudo systemctl reload apache2
 
 У `nano` замініть `SITE` у рядку `ServerName` своїм доменом.
 
-`AllowOverride All` обов'язковий: на `.htaccess` тримаються маршрути WordPress, адреса `/digital-world/` і заборона доступу до `vendor/` та конфігів.
+`AllowOverride All` обов'язковий: на `.htaccess` тримаються маршрути WordPress, адреса `/digital-world/`, заборона доступу до `vendor/` та конфігів, а також стиснення відповідей і довгий кеш для зібраних файлів плагіна (модулі `headers` і `deflate`).
 
 ## 10. HTTPS
 

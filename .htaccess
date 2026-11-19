@@ -3,6 +3,18 @@ RedirectMatch 404 ^/(composer\.(json|lock)|wp-config(-local)?(\.sample)?\.php|RE
 RedirectMatch 404 ^/docs(/|$)
 RedirectMatch 404 ^/wp-content/plugins/digital-world/(frontend|includes)(/|$)
 
+<IfModule mod_mime.c>
+AddType application/json .json
+</IfModule>
+<IfModule mod_deflate.c>
+AddOutputFilterByType DEFLATE text/html text/css text/javascript application/javascript application/x-javascript application/json image/svg+xml
+</IfModule>
+<IfModule mod_headers.c>
+<If "%{REQUEST_URI} =~ m#^/wp-content/plugins/digital-world/dist/assets/#">
+Header set Cache-Control "public, max-age=31536000, immutable"
+</If>
+</IfModule>
+
 # BEGIN WordPress
 <IfModule mod_rewrite.c>
 RewriteEngine On
