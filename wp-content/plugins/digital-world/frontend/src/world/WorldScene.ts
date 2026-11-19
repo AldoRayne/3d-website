@@ -7,6 +7,9 @@ import { isEditableTarget } from './dom'
 import { pushOut } from './navigation'
 import { foliageUniforms } from './foliage'
 import { Interior, PRINT_OPACITY, SHEET_COUNT, snapshotPage } from './interior'
+import { BookSpace } from './reading/BookSpace'
+import { loadFont } from './reading/font'
+import { sculptPage, type Sculpture } from './reading/sculpt'
 import { Player, PLAYER_RADIUS } from './Player'
 import { WorldModel, type Building } from './WorldModel'
 
@@ -18,9 +21,12 @@ interface Walk {
   stuck: number
 }
 
+export type EnterResult = 'read' | 'navigate' | false
+
 export interface WorldSceneOptions {
   onObjectClick: (slug: string) => void
   onZoneChange: (slug: string | null) => void
+  onLink?: (href: string) => void
   reducedMotion?: boolean
 }
 
@@ -73,7 +79,9 @@ export class WorldScene {
   private walk: Walk | null = null
   private faceAfterWalk: number | null = null
   private marker: THREE.Mesh
-  private mode: 'chase' | 'overview' | 'cinematic' = 'chase'
+  private mode: 'chase' | 'overview' | 'cinematic' | 'reading' = 'chase'
+  private space: BookSpace | null = null
+  private reading = false
   private yawOffset = 0
   private pitchOffset = 0
   private distance = 9
@@ -235,6 +243,10 @@ export class WorldScene {
     if (!entry) {
       return
     }
+    if (this.reading) {
+      this.space?.clear()
+      this.reading = false
+    }
     this.leaveInterior()
     this.resetDoor(entry)
     this.cancelWalk()
@@ -376,6 +388,9 @@ export class WorldScene {
   }
 
   private updateCamera(dt: number) {
+    if (this.mode === 'reading') {
+      return
+    }
     if (this.mode === 'cinematic') {
       this.camera.lookAt(this.cinematicLook)
       return
@@ -500,7 +515,7 @@ export class WorldScene {
     }
   }
 
-  enter(slug: string, url: string) {
+  enter(slug: string, url: string): Promise<EnterResult> {
     const entry = this.model.buildings.get(slug)
     if (!entry || this.locked) {
       return Promise.resolve(false)
@@ -509,8 +524,10 @@ export class WorldScene {
     this.cancelWalk()
     this.keys.clear()
     if (this.options.reducedMotion) {
-      return Promise.resolve(true)
+      return Promise.resolve('navigate')
     }
+    void loadFont(300)
+    void loadFont(400)
     this.leaveInterior()
     this.speed = 1
     const page = this.openPage(url)
@@ -524,10 +541,10 @@ export class WorldScene {
         }
       })
       .catch(() => undefined)
-    return this.playEntry(entry, ready)
+    return this.playEntry(entry, ready, page.frame)
   }
 
-  private async playEntry(entry: Building, loaded: Promise<void>) {
+  private async playEntry(entry: Building, loaded: Promise<void>, frame: HTMLIFrameElement): Promise<EnterResult> {
     const interior = this.interior as Interior
     const steps = [
       () => this.play(this.doorTimeline(entry)),
@@ -543,7 +560,125 @@ export class WorldScene {
         return false
       }
     }
+    const sculpture = await this.sculpt(frame, entry.object.color)
+    if (this.interior !== interior) {
+      return false
+    }
+    if (!sculpture) {
+      return 'navigate'
+    }
+    this.leaveInterior()
+    void this.showSpace(sculpture, 'book')
+    return 'read'
+  }
+
+  private async sculpt(frame: HTMLIFrameElement, color: string) {
+    const doc = frame.contentDocument
+    if (!doc) {
+      return null
+    }
+    try {
+      await doc.fonts?.ready
+      const { clientWidth: width, clientHeight: height } = this.container
+      return await sculptPage(doc, { width, height }, color)
+    } catch {
+      return null
+    }
+  }
+
+  private showSpace(sculpture: Sculpture, from: 'book' | 'fade') {
+    this.space ??= new BookSpace({
+      container: this.container,
+      canvas: this.renderer.domElement,
+      camera: this.camera,
+      reducedMotion: !!this.options.reducedMotion,
+      onLink: (href) => this.options.onLink?.(href),
+    })
+    this.reading = true
+    this.locked = true
+    this.mode = 'reading'
+    this.activeScene = this.space.scene
+    return this.space.show(sculpture, from)
+  }
+
+  get readingTitle() {
+    return this.space?.page?.title ?? ''
+  }
+
+  get isReading() {
+    return this.reading
+  }
+
+  private loadHidden(url: string) {
+    const { clientWidth: width, clientHeight: height } = this.container
+    const frame = document.createElement('iframe')
+    frame.src = url
+    frame.title = ''
+    frame.tabIndex = -1
+    frame.setAttribute('aria-hidden', 'true')
+    Object.assign(frame.style, {
+      position: 'fixed',
+      left: '0',
+      top: '0',
+      width: `${width}px`,
+      height: `${height}px`,
+      border: '0',
+      opacity: '0',
+      pointerEvents: 'none',
+      zIndex: '-1',
+    })
+    document.body.appendChild(frame)
+    return new Promise<HTMLIFrameElement>((resolve) => {
+      frame.addEventListener('load', () => resolve(frame), { once: true })
+      window.setTimeout(() => resolve(frame), 8000)
+    })
+  }
+
+  async readUrl(url: string, color: string, slug: string | null) {
+    const frame = await this.loadHidden(url)
+    const sculpture = await this.sculpt(frame, color)
+    frame.remove()
+    if (!sculpture || this.disposed) {
+      return false
+    }
+    if (this.reading && this.space?.page) {
+      await this.space.swap(sculpture)
+      return true
+    }
+    if (slug && this.model.buildings.has(slug)) {
+      this.placeAtDoor(slug)
+    }
+    this.cancelWalk()
+    this.veil.style.opacity = '1'
+    void this.showSpace(sculpture, 'fade')
+    const veil = { value: 1 }
+    gsap.to(veil, { value: 0, duration: this.options.reducedMotion ? 0.01 : 0.6, onUpdate: () => (this.veil.style.opacity = String(veil.value)) })
     return true
+  }
+
+  exitReading(slug: string | null) {
+    if (slug && this.model.buildings.has(slug)) {
+      this.placeAtDoor(slug)
+      return
+    }
+    this.space?.clear()
+    this.reading = false
+    this.activeScene = this.scene
+    this.mode = 'chase'
+    this.locked = false
+    this.snapCamera()
+  }
+
+  readHere() {
+    this.space?.readHere()
+  }
+
+  readTop() {
+    this.space?.flyToTop()
+  }
+
+  flyToAnchor(id: string) {
+    this.space?.flyToAnchor(id)
   }
 
   private doorTimeline(entry: Building) {
@@ -877,6 +1012,9 @@ export class WorldScene {
     this.timer.update()
     const dt = Math.min(this.timer.getDelta(), 0.1)
     const elapsed = this.timer.getElapsed()
+    if (this.reading && this.space) {
+      this.space.update(dt, elapsed)
+    }
     this.stepPlayer(dt)
     this.updateZone()
     this.player.animate(dt, this.moveSpeed, elapsed, !!this.options.reducedMotion)
@@ -920,6 +1058,7 @@ export class WorldScene {
     this.disposed = true
     cancelAnimationFrame(this.frame)
     foliageUniforms.uSeeStrength.value = 0
+    this.space?.dispose()
     this.leaveInterior()
     this.cancelWalk()
     this.resizeObserver.disconnect()

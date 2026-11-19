@@ -817,3 +817,125 @@ kbd {
     transition: none !important;
   }
 }
+
+.dw-reading {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  animation: dw-rise 0.4s ease both;
+}
+
+.dw-reading__bar {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.dw-reading__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: #3b2a1e;
+  font: 700 18px/1.2 system-ui, -apple-system, sans-serif;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dw-reading__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dw-reading__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border: 2px solid #3b2a1e;
+  border-radius: 4px;
+  background: #f4ecd9;
+  color: #3b2a1e;
+  font: 600 14px/1 system-ui, -apple-system, sans-serif;
+  box-shadow: 3px 3px 0 #3b2a1e;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.dw-reading__button:hover {
+  background: #fff8e8;
+}
+
+.dw-reading__button:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 #3b2a1e;
+}
+
+.dw-reading__button:focus-visible {
+  outline: 2px solid #e07a3c;
+  outline-offset: 3px;
+}
+
+.dw-reading__button.is-primary {
+  background: #3b2a1e;
+  color: #f4ecd9;
+}
+
+.dw-reading__help {
+  position: absolute;
+  left: 50%;
+  bottom: 20px;
+  max-width: min(640px, calc(100% - 32px));
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 4px;
+  background: rgba(59, 42, 30, 0.85);
+  color: #f4ecd9;
+  font: 500 13px/1.4 system-ui, -apple-system, sans-serif;
+  text-align: center;
+  transform: translateX(-50%);
+}
+
+.dw-stick {
+  position: fixed;
+  z-index: 15;
+  width: 96px;
+  height: 96px;
+  margin: -48px 0 0 -48px;
+  border: 2px solid rgba(59, 42, 30, 0.45);
+  border-radius: 50%;
+  background: rgba(244, 236, 217, 0.25);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.dw-stick.is-active {
+  opacity: 1;
+}
+
+@media (max-width: 600px) {
+  .dw-reading__bar {
+    top: 12px;
+    left: 12px;
+    right: 12px;
+  }
+
+  .dw-reading__title {
+    order: 3;
+    flex-basis: 100%;
+    font-size: 15px;
+  }
+
+  .dw-reading__button {
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+}
