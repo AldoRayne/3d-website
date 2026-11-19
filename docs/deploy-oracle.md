@@ -32,7 +32,7 @@ Compute → Instances → **Create instance**:
 | Поле | Значення |
 |---|---|
 | Image | Canonical Ubuntu 24.04 (aarch64) |
-| Shape | Ampere → `VM.Standard.A1.Flex`, 1 OCPU, 6 GB RAM (сайту вистачить із запасом, решта ліміту лишиться для другої машини) |
+| Shape | Ampere → `VM.Standard.A1.Flex`, 1 OCPU, 6 GB RAM (сайту вистачить із запасом) |
 | Networking | створити нову VCN з публічною підмережею, **Assign a public IPv4 address** увімкнено |
 | SSH keys | вставити вміст `~/.ssh/id_ed25519.pub` |
 | Boot volume | стандартні 50 GB |
@@ -269,10 +269,6 @@ password=DB_PASS
 ```
 
 Час від часу копіюйте `~/backups` до себе (`rsync -av ubuntu@SERVER_IP:backups/ ./backups/`): бекап на тій самій машині не врятує, якщо машину буде видалено.
-
-## 16. Надалі: мультиплеєр
-
-Node-сервер для мультиплеєра можна запустити на цій же машині. Apache проксуватиме WebSocket через `mod_proxy_wstunnel` (`sudo a2enmod proxy proxy_http proxy_wstunnel`), а процес триматиме `systemd`. Інструкцію додамо разом із самим сервером.
 
 ## Проблеми
 
