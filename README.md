@@ -68,6 +68,14 @@ Commit the changed `composer.json` and `composer.lock` together.
 - After the browser's Back button, or when arriving via `?focus=<slug>`, the character stands at that building's door.
 - AI Navigator: `claude-opus-5-5` with structured output `{reply, action, target, transition}`. The allowed actions are `navigate`, `open`, `overview` and `none`. `target` is restricted to slugs from the catalog, and the server checks it again before responding.
 
+### Performance
+
+- Blocks are not drawn as separate cubes. `world/voxels.ts` builds one mesh per block type that contains only the faces you can see, and merges neighbouring equal faces into large rectangles with a repeating texture. The island, the buildings, the rooms and the admin editor all use it (about 90% fewer triangles than one cube per block).
+- The canvas lowers its pixel ratio in steps of 0.25 when frames run late (below 50 fps and below 80% of the screen's own rate) and raises it again when there is headroom. Hardware antialiasing is off when the device pixel ratio is already 2 or more.
+- In the book, every character is an instanced shape without bevels, and the light sides are marked in the geometry, so each character costs one draw call. The glyph shapes for the page are prepared in small batches while the entry animation plays.
+- The world page embeds the world data in its HTML, so the first frame does not wait for `GET /world`.
+- `.htaccess` gzips HTML, CSS, JS and JSON (and maps `.json` to `application/json`, which XAMPP does not) and gives the hashed files in `dist/assets/` a one-year immutable cache.
+
 ### Enabling Claude
 
 Set the key in `wp-config-local.php`:

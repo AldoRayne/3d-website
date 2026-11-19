@@ -1,6 +1,6 @@
 {
-  "_WorldModel-CdO0YQfO.js": {
-    "file": "assets/WorldModel-CdO0YQfO.js",
+  "_WorldModel-qMEPEgof.js": {
+    "file": "assets/WorldModel-qMEPEgof.js",
     "name": "WorldModel",
     "imports": [
       "_buildings-BRy7GBmf.js"
@@ -21,12 +21,12 @@
     "isDynamicEntry": true
   },
   "src/admin.ts": {
-    "file": "assets/admin-D93wtmym.js",
+    "file": "assets/admin-BvbAGvVi.js",
     "name": "admin",
     "src": "src/admin.ts",
     "isEntry": true,
     "imports": [
-      "_WorldModel-CdO0YQfO.js",
+      "_WorldModel-qMEPEgof.js",
       "_buildings-BRy7GBmf.js",
       "_preview-CDxcuptg.js"
     ],
@@ -60,12 +60,12 @@
     ]
   },
   "src/main.ts": {
-    "file": "assets/main-BbFVuzLv.js",
+    "file": "assets/main-C0PBlaDf.js",
     "name": "main",
     "src": "src/main.ts",
     "isEntry": true,
     "imports": [
-      "_WorldModel-CdO0YQfO.js",
+      "_WorldModel-qMEPEgof.js",
       "_buildings-BRy7GBmf.js"
     ],
     "dynamicImports": [
