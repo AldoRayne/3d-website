@@ -51,13 +51,9 @@ function digital_world_get_objects() {
 }
 
 function digital_world_format_object( WP_Post $post ) {
-	$type      = get_post_meta( $post->ID, 'dw_object_type', true );
-	$animation = get_post_meta( $post->ID, 'dw_animation', true );
 	$door      = get_post_meta( $post->ID, 'dw_door_side', true );
 	$color     = sanitize_hex_color( get_post_meta( $post->ID, 'dw_color', true ) );
-	$scale     = (float) get_post_meta( $post->ID, 'dw_scale', true );
 	$page_id   = (int) get_post_meta( $post->ID, 'dw_linked_page', true );
-	$model_id  = (int) get_post_meta( $post->ID, 'dw_model', true );
 	$page      = $page_id ? get_post( $page_id ) : null;
 
 	$description = trim( (string) get_post_meta( $post->ID, 'dw_description', true ) );
@@ -75,21 +71,44 @@ function digital_world_format_object( WP_Post $post ) {
 		'id'          => $post->ID,
 		'slug'        => $post->post_name,
 		'title'       => get_the_title( $post ),
-		'type'        => isset( DIGITAL_WORLD_TYPES[ $type ] ) ? $type : 'building',
+		'seed'        => digital_world_building_seed( $post->ID ),
 		'description' => $description,
 		'keywords'    => $keywords,
 		'color'       => $color ?: '#3498db',
-		'animation'   => isset( DIGITAL_WORLD_ANIMATIONS[ $animation ] ) ? $animation : 'none',
-		'scale'       => $scale > 0 ? $scale : 1.0,
 		'door'        => isset( DIGITAL_WORLD_DOOR_SIDES[ $door ] ) ? $door : 'auto',
 		'position'    => array(
 			'x' => (float) get_post_meta( $post->ID, 'dw_position_x', true ),
-			'y' => (float) get_post_meta( $post->ID, 'dw_position_y', true ),
 			'z' => (float) get_post_meta( $post->ID, 'dw_position_z', true ),
 		),
-		'model'       => $model_id ? wp_get_attachment_url( $model_id ) : null,
 		'page_id'     => $page ? $page->ID : null,
 		'url'         => $page && 'publish' === $page->post_status ? get_permalink( $page ) : null,
 		'page_title'  => $page ? get_the_title( $page ) : null,
 	);
+}
+
+const DIGITAL_WORLD_RADIUS_OPTION = 'digital_world_island_radius';
+const DIGITAL_WORLD_MIN_RADIUS    = 16;
+const DIGITAL_WORLD_MAX_RADIUS    = 60;
+
+function digital_world_island_radius() {
+	$stored = (int) get_option( DIGITAL_WORLD_RADIUS_OPTION, 0 );
+	if ( $stored ) {
+		return max( DIGITAL_WORLD_MIN_RADIUS, min( DIGITAL_WORLD_MAX_RADIUS, $stored ) );
+	}
+	$radius = 22;
+	foreach ( digital_world_get_objects() as $object ) {
+		$radius = max( $radius, (int) ceil( hypot( $object['position']['x'], $object['position']['z'] ) + 9 ) );
+	}
+	return min( DIGITAL_WORLD_MAX_RADIUS, $radius );
+}
+
+const DIGITAL_WORLD_SEED_META = 'dw_building_seed';
+const DIGITAL_WORLD_MAX_SEED  = 2147483647;
+
+function digital_world_building_seed( $post_id ) {
+	$seed = (int) get_post_meta( $post_id, DIGITAL_WORLD_SEED_META, true );
+	if ( $seed > 0 && $seed <= DIGITAL_WORLD_MAX_SEED ) {
+		return $seed;
+	}
+	return ( crc32( 'digital-world-' . $post_id ) % ( DIGITAL_WORLD_MAX_SEED - 1 ) ) + 1;
 }

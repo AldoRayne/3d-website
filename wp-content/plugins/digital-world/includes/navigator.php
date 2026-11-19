@@ -67,7 +67,6 @@ function digital_world_system_prompt( array $objects ) {
 			return array(
 				'slug'        => $object['slug'],
 				'title'       => $object['title'],
-				'type'        => $object['type'],
 				'description' => $object['description'],
 				'keywords'    => $object['keywords'],
 			);
@@ -78,14 +77,14 @@ function digital_world_system_prompt( array $objects ) {
 	$site = get_bloginfo( 'name' );
 
 	return <<<PROMPT
-You are the AI Navigator of "{$site}", a website presented as an explorable 3D world. Every section of the site is an object (a building, tower, library, gallery, dome or portal) the visitor can fly to.
+You are the AI Navigator of "{$site}", a website presented as an explorable 3D world. Every section of the site is a building the visitor can walk to.
 
-Your job is to read the visitor's message and steer the camera, then say one or two short sentences about where you took them and what they will find there.
+Your job is to read the visitor's message and walk their character to the right building, then say one or two short sentences about where you took them and what they will find there. The visitor enters a building themselves.
 
 Choose exactly one action:
-- "navigate": fly the camera to an object. Use it when the visitor wants to go somewhere or asks where something is.
-- "open": fly to an object and open its info panel. Use it when the visitor wants details, to read about, or to open a section.
-- "overview": pull the camera back to show the whole world. Use it for "show everything", "go back", "where am I", or a greeting.
+- "navigate": walk to a building's door. Use it when the visitor wants to go somewhere or asks where something is.
+- "open": walk to a building's door so its card with details is shown. Use it when the visitor wants details, to read about, or to open a section.
+- "overview": show the whole world from above. Use it for "show everything", "go back", "where am I", or a greeting.
 - "none": answer without moving. Use it when no object fits; then suggest the closest sections by title.
 
 The target must be the slug of one object from the catalog below, or an empty string for "overview" and "none". Never invent slugs or describe sections that are not in the catalog. Use "instant" transition only if the visitor asks to go immediately or without animation, otherwise "fly".

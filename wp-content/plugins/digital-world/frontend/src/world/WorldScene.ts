@@ -1,40 +1,19 @@
 import * as THREE from 'three'
 import gsap from 'gsap'
 import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js'
-import type { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-import type { CameraTransition, DoorSide, WorldObject } from '@/types'
-import { blueprint, rotateCell } from './buildings'
-import { NavGrid, pushOut, type Rect } from './navigation'
+import type { CameraTransition, WorldObject } from '@/types'
+import { isEditableTarget } from './dom'
+import { pushOut } from './navigation'
 import { Player, PLAYER_RADIUS } from './Player'
-import { texture } from './textures'
-import { VoxelGrid } from './voxels'
+import { WorldModel, type Building } from './WorldModel'
+
+export { isEditableTarget, isWebGLAvailable } from './dom'
 
 export interface ScreenRect {
   x: number
   y: number
   width: number
   height: number
-}
-
-interface Door {
-  pivot: THREE.Group
-  glow: THREE.Mesh
-  world: THREE.Vector3
-  outward: THREE.Vector3
-  front: THREE.Vector3
-}
-
-interface Entry {
-  object: WorldObject
-  frame: THREE.Group
-  quarter: number
-  center: THREE.Vector2
-  rect: Rect
-  height: number
-  hitbox: THREE.Mesh
-  label: HTMLButtonElement
-  mat: THREE.Mesh
-  door: Door
 }
 
 interface Walk {
@@ -49,27 +28,10 @@ export interface WorldSceneOptions {
   reducedMotion?: boolean
 }
 
-export function isWebGLAvailable() {
-  try {
-    const canvas = document.createElement('canvas')
-    return !!(window.WebGLRenderingContext && (canvas.getContext('webgl2') || canvas.getContext('webgl')))
-  } catch {
-    return false
-  }
-}
-
-export function isEditableTarget(target: EventTarget | null) {
-  const element = target as HTMLElement | null
-  return !!element && (element.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName))
-}
-
 const WALK_SPEED = 5.2
 const TURN_SPEED = 2.6
-const ZONE_DEPTH = 2.4
-const ZONE_HALF_WIDTH = 1.3
 const EYE = new THREE.Vector3(0, 1.6, 0)
 const UP = new THREE.Vector3(0, 1, 0)
-const DOOR_QUARTER: Record<Exclude<DoorSide, 'auto'>, number> = { south: 0, east: 1, north: 2, west: 3 }
 const KEYS = {
   forward: ['ArrowUp', 'KeyW'],
   back: ['ArrowDown', 'KeyS'],
@@ -77,21 +39,6 @@ const KEYS = {
   right: ['ArrowRight', 'KeyD'],
 }
 const ALL_KEYS = new Set(Object.values(KEYS).flat())
-
-function seeded(seed: number) {
-  let a = seed >>> 0
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0
-    let t = Math.imul(a ^ (a >>> 15), a | 1)
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
-
-function quarterVector(quarter: number) {
-  const [x, z] = rotateCell(0, 1, quarter)
-  return new THREE.Vector3(x, 0, z)
-}
 
 function headingOf(direction: THREE.Vector3) {
   return Math.atan2(direction.x, direction.z)
@@ -102,26 +49,19 @@ export class WorldScene {
   private labels: CSS2DRenderer
   private scene = new THREE.Scene()
   private camera: THREE.PerspectiveCamera
-  private clock = new THREE.Clock()
+  private timer = new THREE.Timer()
   private raycaster = new THREE.Raycaster()
   private pointer = new THREE.Vector2()
   private ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
-  private entries = new Map<string, Entry>()
-  private hitboxes: THREE.Mesh[] = []
-  private colliders: Rect[] = []
-  private nav: NavGrid | null = null
-  private terrain: THREE.Object3D | null = null
-  private clouds = new THREE.Group()
   private sun: THREE.DirectionalLight
   private hovered: string | null = null
   private zone: string | null = null
   private frame = 0
   private resizeObserver: ResizeObserver
-  private worldRadius = 24
-  private spawnPosition = new THREE.Vector3()
-  private gltfLoader: GLTFLoader | null = null
   private disposed = false
   private player = new Player()
+  private model: WorldModel
+  private labelButtons = new Map<string, HTMLButtonElement>()
   private keys = new Set<string>()
   private walk: Walk | null = null
   private faceAfterWalk: number | null = null
@@ -149,7 +89,7 @@ export class WorldScene {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     this.renderer.setSize(width, height)
     this.renderer.shadowMap.enabled = this.shadows
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    this.renderer.shadowMap.type = THREE.PCFShadowMap
     this.renderer.domElement.classList.add('dw-canvas')
     container.appendChild(this.renderer.domElement)
 
@@ -179,7 +119,8 @@ export class WorldScene {
     this.marker.position.y = 0.03
     this.marker.visible = false
 
-    this.scene.add(this.player.root, this.marker, this.clouds)
+    this.model = new WorldModel({ shadows: this.shadows })
+    this.scene.add(this.player.root, this.marker, this.model.root)
 
     const canvas = this.renderer.domElement
     canvas.addEventListener('pointerdown', this.onPointerDown)
@@ -206,343 +147,28 @@ export class WorldScene {
     return this.camera.aspect < 1 ? 12 : 9
   }
 
-  setObjects(objects: WorldObject[]) {
-    this.entries.forEach((entry) => {
-      entry.frame.removeFromParent()
-      entry.label.remove()
-    })
-    this.entries.clear()
-    this.hitboxes = []
-    this.colliders = []
-    this.terrain?.removeFromParent()
-
-    this.worldRadius = Math.ceil(
-      Math.max(22, ...objects.map((object) => Math.hypot(object.position.x, object.position.z) + 9)),
-    )
-    const grid = new VoxelGrid()
-    const floors: Array<[number, number]> = []
-
-    for (const object of objects) {
-      const plan = blueprint(object.type, object.color)
-      const cx = Math.round(object.position.x)
-      const cz = Math.round(object.position.z)
-      const quarter = this.doorQuarter(object.door, cx, cz)
-      const swap = quarter % 2 === 1
-      const extentX = (swap ? plan.halfZ : plan.halfX) + 0.5
-      const extentZ = (swap ? plan.halfX : plan.halfZ) + 0.5
-      const rect = { minX: cx - extentX, maxX: cx + extentX, minZ: cz - extentZ, maxZ: cz + extentZ }
-
-      if (!object.model) {
-        for (const [x, y, z, id] of plan.cells) {
-          const [rx, rz] = rotateCell(x, z, quarter)
-          grid.set(cx + rx, y, cz + rz, id)
-        }
-      }
-      for (let x = -plan.halfX; x <= plan.halfX; x++) {
-        for (let z = -plan.halfZ; z <= plan.halfZ; z++) {
-          const [rx, rz] = rotateCell(x, z, quarter)
-          floors.push([cx + rx, cz + rz])
-        }
-      }
-
-      const frame = new THREE.Group()
-      frame.position.set(cx, 0, cz)
-      frame.rotation.y = (quarter * Math.PI) / 2
-
-      const hitbox = new THREE.Mesh(
-        new THREE.BoxGeometry(plan.halfX * 2 + 1, plan.height, plan.halfZ * 2 + 1),
-        new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }),
-      )
-      hitbox.position.y = plan.height / 2
-      hitbox.userData.slug = object.slug
-      frame.add(hitbox)
-
-      const door = this.createDoor(frame, plan.halfZ, quarter, cx, cz)
-      const mat = new THREE.Mesh(
-        new THREE.PlaneGeometry(ZONE_HALF_WIDTH * 2, ZONE_DEPTH),
-        new THREE.MeshBasicMaterial({ color: object.color, transparent: true, opacity: 0.18, depthWrite: false }),
-      )
-      mat.rotation.x = -Math.PI / 2
-      mat.position.set(0, 0.015, plan.halfZ + 0.5 + ZONE_DEPTH / 2)
-      frame.add(mat)
-
+  setObjects(objects: WorldObject[], radius: number) {
+    this.labelButtons.forEach((label) => label.remove())
+    this.labelButtons.clear()
+    this.model.setWorld(objects, radius)
+    for (const [slug, building] of this.model.buildings) {
       const label = document.createElement('button')
       label.type = 'button'
       label.tabIndex = -1
       label.className = 'dw-label'
-      label.style.setProperty('--dw-accent', object.color)
-      label.textContent = object.title
-      label.addEventListener('click', () => !this.locked && this.options.onObjectClick(object.slug))
-      label.addEventListener('pointerenter', () => this.setHovered(object.slug))
+      label.style.setProperty('--dw-accent', building.object.color)
+      label.textContent = building.object.title
+      label.addEventListener('click', () => !this.locked && this.options.onObjectClick(slug))
+      label.addEventListener('pointerenter', () => this.setHovered(slug))
       label.addEventListener('pointerleave', () => this.setHovered(null))
-      const labelObject = new CSS2DObject(label)
-      labelObject.position.set(0, plan.height + 1.2, 0)
-      frame.add(labelObject)
-
-      this.scene.add(frame)
-      this.hitboxes.push(hitbox)
-      this.colliders.push(rect)
-      this.entries.set(object.slug, {
-        object,
-        frame,
-        quarter,
-        center: new THREE.Vector2(cx, cz),
-        rect,
-        height: plan.height,
-        hitbox,
-        label,
-        mat,
-        door,
-      })
+      building.anchor.add(new CSS2DObject(label))
+      this.labelButtons.set(slug, label)
     }
-
-    this.nav = new NavGrid(this.worldRadius, this.colliders, PLAYER_RADIUS)
-    this.spawnPosition = this.findSpawn()
-    const pathCells = this.carvePaths()
-    this.colliders.push(...this.plantTrees(grid, pathCells, floors))
-    this.nav = new NavGrid(this.worldRadius, this.colliders, PLAYER_RADIUS)
-    this.buildTerrain(grid, pathCells, floors)
-    this.buildClouds()
-
-    this.terrain = grid.build({ shadows: this.shadows })
-    this.scene.add(this.terrain)
     const reach = 26
     Object.assign(this.sun.shadow.camera, { left: -reach, right: reach, top: reach, bottom: -reach, near: 1, far: 140 })
     this.sun.shadow.camera.updateProjectionMatrix()
-
-    this.placeAt(this.spawnPosition, headingOf(this.spawnPosition.clone().negate()))
+    this.placeAt(this.model.spawn, headingOf(this.model.spawn.clone().negate()))
     this.applyHighlight()
-    void this.loadModels()
-  }
-
-  private doorQuarter(side: DoorSide, cx: number, cz: number) {
-    if (side !== 'auto' && side in DOOR_QUARTER) {
-      return DOOR_QUARTER[side]
-    }
-    if (Math.hypot(cx, cz) < 3) {
-      return 0
-    }
-    return Math.abs(cx) > Math.abs(cz) ? (cx > 0 ? 3 : 1) : cz > 0 ? 2 : 0
-  }
-
-  private createDoor(frame: THREE.Group, halfZ: number, quarter: number, cx: number, cz: number): Door {
-    const face = halfZ + 0.5
-    const pivot = new THREE.Group()
-    pivot.position.set(-0.5, 0, face - 0.07)
-    const plank = new THREE.MeshLambertMaterial({ map: texture('door') })
-    for (const [y, name] of [
-      [0.5, 'doorBottom'],
-      [1.5, 'doorTop'],
-    ] as const) {
-      const face = new THREE.MeshLambertMaterial({ map: texture(name) })
-      const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.98, 1, 0.12), [plank, plank, plank, plank, face, face])
-      leaf.position.set(0.5, y, 0)
-      leaf.castShadow = this.shadows
-      pivot.add(leaf)
-    }
-    const glow = new THREE.Mesh(
-      new THREE.PlaneGeometry(1, 2),
-      new THREE.MeshBasicMaterial({ color: '#fff4cf', transparent: true, opacity: 0 }),
-    )
-    glow.position.set(0, 1, face - 0.45)
-    frame.add(pivot, glow)
-
-    const outward = quarterVector(quarter)
-    const world = new THREE.Vector3(cx, 0, cz).addScaledVector(outward, face)
-    return { pivot, glow, world, outward, front: world.clone().addScaledVector(outward, 1.1) }
-  }
-
-  private findSpawn() {
-    const angles = [...this.entries.values()]
-      .filter((entry) => entry.center.length() > 2)
-      .map((entry) => Math.atan2(entry.center.y, entry.center.x))
-      .sort((a, b) => a - b)
-    let heading = Math.PI / 2
-    let widest = -1
-    angles.forEach((angle, i) => {
-      const next = i + 1 < angles.length ? angles[i + 1] : angles[0] + Math.PI * 2
-      if (next - angle > widest) {
-        widest = next - angle
-        heading = angle + widest / 2
-      }
-    })
-    for (const share of [0.72, 0.62, 0.82, 0.5]) {
-      for (let i = 0; i < 24; i++) {
-        const angle = heading + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * (Math.PI / 24)
-        const point = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle)).multiplyScalar(this.worldRadius * share)
-        point.set(Math.round(point.x), 0, Math.round(point.z))
-        if (this.nav?.isClear(new THREE.Vector2(point.x, point.z), 2) && !this.zoneAt(point)) {
-          return point
-        }
-      }
-    }
-    return new THREE.Vector3(0, 0, Math.round(this.worldRadius * 0.6))
-  }
-
-  private carvePaths() {
-    const cells = new Set<string>()
-    const start = new THREE.Vector2(this.spawnPosition.x, this.spawnPosition.z)
-    for (const entry of this.entries.values()) {
-      const front = new THREE.Vector2(entry.door.front.x, entry.door.front.z)
-      const path = this.nav?.findPath(start, front) ?? []
-      let from = start.clone()
-      for (const point of path) {
-        const steps = Math.max(1, Math.ceil(from.distanceTo(point) * 2))
-        for (let i = 0; i <= steps; i++) {
-          const p = from.clone().lerp(point, i / steps)
-          cells.add(`${Math.round(p.x)},${Math.round(p.y)}`)
-        }
-        from = point
-      }
-      for (let d = 0; d <= 2; d++) {
-        const p = entry.door.world.clone().addScaledVector(entry.door.outward, 0.5 + d)
-        cells.add(`${Math.round(p.x)},${Math.round(p.z)}`)
-      }
-    }
-    return cells
-  }
-
-  private plantTrees(grid: VoxelGrid, paths: Set<string>, floors: Array<[number, number]>) {
-    const rnd = seeded(this.entries.size * 7919 + this.worldRadius)
-    const taken = new Set(floors.map(([x, z]) => `${x},${z}`))
-    const rects: Rect[] = []
-    const planted: THREE.Vector2[] = []
-    const spawn = new THREE.Vector2(this.spawnPosition.x, this.spawnPosition.z)
-    const target = Math.round(this.worldRadius * 0.6)
-    for (let attempt = 0; attempt < 400 && planted.length < target; attempt++) {
-      const angle = rnd() * Math.PI * 2
-      const radius = Math.sqrt(rnd()) * (this.worldRadius - 3)
-      const x = Math.round(Math.cos(angle) * radius)
-      const z = Math.round(Math.sin(angle) * radius)
-      const point = new THREE.Vector2(x, z)
-      let nearPath = false
-      for (let dx = -1; dx <= 1 && !nearPath; dx++) {
-        for (let dz = -1; dz <= 1 && !nearPath; dz++) {
-          nearPath = paths.has(`${x + dx},${z + dz}`)
-        }
-      }
-      if (
-        nearPath ||
-        taken.has(`${x},${z}`) ||
-        !this.nav?.isClear(point, 2.6) ||
-        point.distanceTo(spawn) < 5 ||
-        planted.some((other) => other.distanceTo(point) < 4) ||
-        [...this.entries.values()].some(
-          (entry) => point.distanceTo(new THREE.Vector2(entry.door.front.x, entry.door.front.z)) < 4,
-        )
-      ) {
-        continue
-      }
-      planted.push(point)
-      const trunk = 3 + Math.floor(rnd() * 2)
-      for (let y = 0; y < trunk; y++) {
-        grid.set(x, y, z, 'log')
-      }
-      for (let y = trunk - 1; y <= trunk + 2; y++) {
-        const r = y >= trunk + 1 ? 1 : 2
-        for (let dx = -r; dx <= r; dx++) {
-          for (let dz = -r; dz <= r; dz++) {
-            const corner = Math.abs(dx) === r && Math.abs(dz) === r
-            if ((corner && (r === 1 ? y === trunk + 2 : rnd() < 0.6)) || (dx === 0 && dz === 0 && y < trunk)) {
-              continue
-            }
-            grid.set(x + dx, y, z + dz, 'leaves')
-          }
-        }
-      }
-      rects.push({ minX: x - 0.5, maxX: x + 0.5, minZ: z - 0.5, maxZ: z + 0.5 })
-    }
-    return rects
-  }
-
-  private buildTerrain(grid: VoxelGrid, paths: Set<string>, floors: Array<[number, number]>) {
-    const rnd = seeded(this.worldRadius * 31)
-    const floorSet = new Set(floors.map(([x, z]) => `${x},${z}`))
-    const radius = this.worldRadius
-    for (let x = -radius - 1; x <= radius + 1; x++) {
-      for (let z = -radius - 1; z <= radius + 1; z++) {
-        const k = `${x},${z}`
-        const jitter = rnd() * 0.9
-        const distance = Math.hypot(x, z) - jitter
-        if (distance > radius) {
-          continue
-        }
-        grid.set(x, -1, z, floorSet.has(k) ? 'planks' : paths.has(k) ? 'path' : 'grass')
-        for (let level = 2; level <= 9; level++) {
-          if (distance > radius - (level - 1) * 1.6 - jitter * 1.5) {
-            break
-          }
-          grid.set(x, -level, z, level <= 3 ? 'dirt' : 'stone')
-        }
-      }
-    }
-  }
-
-  private buildClouds() {
-    this.clouds.clear()
-    const rnd = seeded(4242)
-    const grid = new VoxelGrid()
-    for (let c = 0; c < 9; c++) {
-      const angle = rnd() * Math.PI * 2
-      const distance = 20 + rnd() * 70
-      const cx = Math.round(Math.cos(angle) * distance)
-      const cz = Math.round(Math.sin(angle) * distance)
-      const cy = 26 + Math.floor(rnd() * 10)
-      const w = 4 + Math.floor(rnd() * 5)
-      const d = 3 + Math.floor(rnd() * 4)
-      for (let x = -w; x <= w; x++) {
-        for (let z = -d; z <= d; z++) {
-          if ((x * x) / (w * w) + (z * z) / (d * d) <= 1 + rnd() * 0.2) {
-            grid.set(cx + x, cy, cz + z, 'cloud')
-          }
-        }
-      }
-    }
-    this.clouds.add(grid.build({ shadows: false }))
-  }
-
-  private async loadModels() {
-    const withModels = [...this.entries.values()].filter((entry) => entry.object.model)
-    if (!withModels.length) {
-      return
-    }
-    if (!this.gltfLoader) {
-      const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js')
-      this.gltfLoader = new GLTFLoader()
-    }
-    for (const entry of withModels) {
-      if (this.disposed) {
-        return
-      }
-      try {
-        const gltf = await this.gltfLoader.loadAsync(entry.object.model as string)
-        const model = gltf.scene
-        const { width, depth } = (entry.hitbox.geometry as THREE.BoxGeometry).parameters
-        const box = new THREE.Box3().setFromObject(model)
-        const size = box.getSize(new THREE.Vector3())
-        const fit = Math.min(width / Math.max(size.x, 0.001), depth / Math.max(size.z, 0.001))
-        model.scale.setScalar(fit)
-        model.position.y = -box.min.y * fit
-        entry.frame.add(model)
-      } catch (error) {
-        console.warn(`[digital-world] GLB for "${entry.object.slug}" failed`, error)
-      }
-    }
-  }
-
-  private zoneAt(point: THREE.Vector3) {
-    let current: string | null = null
-    let best = Infinity
-    for (const [slug, entry] of this.entries) {
-      const offset = point.clone().sub(entry.door.world)
-      const depth = offset.dot(entry.door.outward)
-      const lateral = Math.abs(offset.x * entry.door.outward.z - offset.z * entry.door.outward.x)
-      if (depth >= 0 && depth <= ZONE_DEPTH && lateral <= ZONE_HALF_WIDTH && depth < best) {
-        current = slug
-        best = depth
-      }
-    }
-    return current
   }
 
   private placeAt(point: THREE.Vector3, heading: number) {
@@ -575,7 +201,7 @@ export class WorldScene {
       )
       this.raycaster.set(target, direction)
       this.raycaster.far = this.distance
-      const hit = this.raycaster.intersectObjects(this.hitboxes, false)[0]
+      const hit = this.raycaster.intersectObjects(this.model.hitboxes, false)[0]
       const distance = hit ? Math.max(1.4, hit.distance - 0.3) : this.distance
       chosen ??= { direction, distance }
       if (distance >= Math.min(this.distance, 5)) {
@@ -589,7 +215,7 @@ export class WorldScene {
   }
 
   placeAtDoor(slug: string) {
-    const entry = this.entries.get(slug)
+    const entry = this.model.buildings.get(slug)
     if (!entry) {
       return
     }
@@ -609,7 +235,7 @@ export class WorldScene {
   }
 
   walkTo(slug: string, transition: CameraTransition = 'fly'): Promise<boolean> {
-    const entry = this.entries.get(slug)
+    const entry = this.model.buildings.get(slug)
     if (!entry || this.locked) {
       return Promise.resolve(false)
     }
@@ -625,7 +251,7 @@ export class WorldScene {
   private startWalk(goal: THREE.Vector2, face: number | null = null) {
     this.cancelWalk()
     const from = new THREE.Vector2(this.player.position.x, this.player.position.z)
-    const points = this.nav?.findPath(from, goal)
+    const points = this.model.nav?.findPath(from, goal)
     if (!points?.length) {
       return Promise.resolve(false)
     }
@@ -658,10 +284,10 @@ export class WorldScene {
   }
 
   private resolve(point: THREE.Vector2) {
-    for (const rect of this.colliders) {
+    for (const rect of this.model.colliders) {
       pushOut(point, rect, PLAYER_RADIUS)
     }
-    const limit = this.worldRadius - 1.3
+    const limit = this.model.radius - 1.3
     const distance = point.length()
     if (distance > limit) {
       point.multiplyScalar(limit / distance)
@@ -746,7 +372,7 @@ export class WorldScene {
     let position: THREE.Vector3
     let target: THREE.Vector3
     if (this.mode === 'overview') {
-      const radius = this.worldRadius
+      const radius = this.model.radius
       const away = new THREE.Vector3(this.player.position.x, 0, this.player.position.z)
       if (away.lengthSq() < 1) {
         away.set(0, 0, 1)
@@ -763,7 +389,7 @@ export class WorldScene {
   }
 
   private updateZone() {
-    const current = this.locked ? this.zone : this.zoneAt(this.player.position)
+    const current = this.locked ? this.zone : this.model.zoneAt(this.player.position)
     if (current !== this.zone) {
       this.zone = current
       this.applyHighlight()
@@ -781,20 +407,20 @@ export class WorldScene {
   }
 
   private applyHighlight() {
-    for (const [slug, entry] of this.entries) {
+    for (const [slug, entry] of this.model.buildings) {
       const inZone = slug === this.zone
-      entry.label.classList.toggle('is-active', inZone || slug === this.hovered)
-      entry.label.classList.toggle('is-zone', inZone)
+      this.labelButtons.get(slug)?.classList.toggle('is-active', inZone || slug === this.hovered)
+      this.labelButtons.get(slug)?.classList.toggle('is-zone', inZone)
       ;(entry.mat.material as THREE.MeshBasicMaterial).opacity = inZone ? 0.45 : 0.18
     }
   }
 
-  private resetDoor(entry: Entry) {
+  private resetDoor(entry: Building) {
     entry.door.pivot.rotation.y = 0
     ;(entry.door.glow.material as THREE.MeshBasicMaterial).opacity = 0
   }
 
-  private apertureRect(entry: Entry): ScreenRect {
+  private apertureRect(entry: Building): ScreenRect {
     const lateral = new THREE.Vector3(entry.door.outward.z, 0, -entry.door.outward.x)
     const bounds = this.container.getBoundingClientRect()
     const xs: number[] = []
@@ -813,7 +439,7 @@ export class WorldScene {
   }
 
   enter(slug: string, portal: { prepare: () => Promise<void>; frame: (rect: ScreenRect, progress: number) => void }) {
-    const entry = this.entries.get(slug)
+    const entry = this.model.buildings.get(slug)
     if (!entry || this.locked) {
       return Promise.resolve(false)
     }
@@ -989,7 +615,7 @@ export class WorldScene {
       return
     }
     const point = this.raycaster.ray.intersectPlane(this.ground, new THREE.Vector3())
-    if (point && Math.hypot(point.x, point.z) < this.worldRadius - 1) {
+    if (point && Math.hypot(point.x, point.z) < this.model.radius - 1) {
       void this.startWalk(this.resolve(new THREE.Vector2(point.x, point.z)))
     }
   }
@@ -1010,7 +636,7 @@ export class WorldScene {
   }
 
   private pickObject() {
-    const hit = this.raycaster.intersectObjects(this.hitboxes, false)[0]
+    const hit = this.raycaster.intersectObjects(this.model.hitboxes, false)[0]
     return (hit?.object.userData.slug as string | undefined) ?? null
   }
 
@@ -1036,7 +662,7 @@ export class WorldScene {
       this.frame = 0
       this.keys.clear()
     } else if (!this.frame && !this.disposed) {
-      this.clock.getDelta()
+      this.timer.update()
       this.loop()
     }
   }
@@ -1046,14 +672,15 @@ export class WorldScene {
       return
     }
     this.frame = requestAnimationFrame(this.loop)
-    const dt = Math.min(this.clock.getDelta(), 0.1)
-    const elapsed = this.clock.elapsedTime
+    this.timer.update()
+    const dt = Math.min(this.timer.getDelta(), 0.1)
+    const elapsed = this.timer.getElapsed()
     this.stepPlayer(dt)
     this.updateZone()
     this.player.animate(dt, this.moveSpeed, elapsed, !!this.options.reducedMotion)
     this.updateCamera(dt)
     if (!this.options.reducedMotion) {
-      this.clouds.position.x = ((elapsed * 0.6 + 80) % 160) - 80
+      this.model.animateClouds(elapsed)
       if (this.marker.visible) {
         this.marker.scale.setScalar(1 + Math.sin(elapsed * 6) * 0.15)
       }

@@ -1,4 +1,3 @@
-import type { WorldObjectType } from '@/types'
 import type { BlockId } from './voxels'
 
 export type Cell = [number, number, number, BlockId]
@@ -10,228 +9,259 @@ export interface Blueprint {
   height: number
 }
 
-type Painter = (x: number, y: number, z: number, edge: { corner: boolean; face: 'x' | 'z' | null }) => BlockId | null
+type Roof = 'flat' | 'pyramid' | 'gable' | 'dome' | 'battlement'
+type Windows = 'pairs' | 'band' | 'sparse'
+type Extra = 'none' | 'chimney' | 'flag' | 'beacon'
 
-function box(halfX: number, halfZ: number, height: number, paint: Painter, cells: Cell[] = []) {
-  for (let y = 0; y < height; y++) {
+export interface BuildingSpec {
+  seed: number
+  halfX: number
+  halfZ: number
+  floors: number
+  floorHeight: number
+  wall: BlockId
+  corner: BlockId
+  material: string
+  windows: Windows
+  roof: Roof
+  extra: Extra
+  trim: boolean
+  awning: boolean
+}
+
+const WALLS: Array<{ wall: BlockId; corner: BlockId; material: string }> = [
+  { wall: 'planks', corner: 'log', material: 'дерево' },
+  { wall: 'brick', corner: 'stoneBrick', material: 'цегла' },
+  { wall: 'stoneBrick', corner: 'stone', material: 'камінь' },
+  { wall: 'plaster', corner: 'log', material: 'тиньк і дерево' },
+  { wall: 'plaster', corner: 'stoneBrick', material: 'тиньк і камінь' },
+  { wall: 'stone', corner: 'log', material: 'бут і дерево' },
+]
+
+const ROOF_LABELS: Record<Roof, string> = {
+  flat: 'плаский дах',
+  pyramid: 'шатровий дах',
+  gable: 'двосхилий дах',
+  dome: 'купол',
+  battlement: 'зубчастий дах',
+}
+
+export const MAX_SEED = 2147483647
+
+export function randomSeed() {
+  return 1 + Math.floor(Math.random() * (MAX_SEED - 1))
+}
+
+function random(seed: number) {
+  let a = seed >>> 0
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0
+    let t = Math.imul(a ^ (a >>> 15), a | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+function pick<T>(rnd: () => number, items: readonly T[], weights?: readonly number[]): T {
+  if (!weights) {
+    return items[Math.floor(rnd() * items.length)]
+  }
+  const total = weights.reduce((sum, w) => sum + w, 0)
+  let roll = rnd() * total
+  for (let i = 0; i < items.length; i++) {
+    roll -= weights[i]
+    if (roll <= 0) {
+      return items[i]
+    }
+  }
+  return items[items.length - 1]
+}
+
+export function specFromSeed(seed: number): BuildingSpec {
+  const rnd = random(seed)
+  const floors = pick(rnd, [1, 2, 3, 4], [3, 4, 2, 1])
+  const tall = floors >= 3
+  const halfX = tall ? pick(rnd, [2, 3]) : pick(rnd, [2, 3, 3, 4])
+  const halfZ = tall ? 2 : pick(rnd, [2, 2, 3])
+  const material = pick(rnd, WALLS)
+  const squareish = Math.abs(halfX - halfZ) <= 1
+  const roofs: Roof[] = ['flat', 'pyramid', 'gable', ...(squareish ? (['dome'] as Roof[]) : []), ...(tall ? (['battlement', 'battlement'] as Roof[]) : [])]
+  return {
+    seed,
+    halfX,
+    halfZ,
+    floors,
+    floorHeight: pick(rnd, [3, 4], [2, 1]),
+    wall: material.wall,
+    corner: material.corner,
+    material: material.material,
+    windows: pick(rnd, ['pairs', 'band', 'sparse'] as const),
+    roof: pick(rnd, roofs),
+    extra: pick(rnd, ['none', 'chimney', 'flag', 'beacon'] as const, [3, 2, 2, 2]),
+    trim: rnd() < 0.6,
+    awning: rnd() < 0.4,
+  }
+}
+
+function plural(n: number) {
+  const last = n % 10
+  const tens = n % 100
+  if (last === 1 && tens !== 11) {
+    return 'поверх'
+  }
+  return last >= 2 && last <= 4 && (tens < 12 || tens > 14) ? 'поверхи' : 'поверхів'
+}
+
+export function describeBuilding(seed: number) {
+  const spec = specFromSeed(seed)
+  const kind = spec.floors >= 3 ? 'Вежа' : spec.halfX >= 4 ? 'Зала' : 'Будинок'
+  return `${kind}, ${spec.floors} ${plural(spec.floors)}, ${spec.material}, ${ROOF_LABELS[spec.roof]}`
+}
+
+export function generateBuilding(seed: number, color: string): Blueprint {
+  const spec = specFromSeed(seed)
+  const { halfX, halfZ, floors, floorHeight, wall, corner } = spec
+  const accent = `accent:${color}`
+  const roofBlock = `roof:${color}`
+  const groundHeight = Math.max(floorHeight, 3)
+  const height = groundHeight + (floors - 1) * floorHeight
+  const cells = new Map<string, Cell>()
+  const put = (x: number, y: number, z: number, id: BlockId) => cells.set(`${x},${y},${z}`, [x, y, z, id])
+
+  const floorBase = (floor: number) => (floor === 0 ? 0 : groundHeight + (floor - 1) * floorHeight)
+
+  for (let floor = 0; floor < floors; floor++) {
+    const base = floorBase(floor)
+    const top = floor === 0 ? groundHeight : floorHeight
+    for (let dy = 0; dy < top; dy++) {
+      const y = base + dy
+      const lastRow = dy === top - 1
+      for (let x = -halfX; x <= halfX; x++) {
+        for (let z = -halfZ; z <= halfZ; z++) {
+          const onX = Math.abs(x) === halfX
+          const onZ = Math.abs(z) === halfZ
+          if (!onX && !onZ) {
+            continue
+          }
+          if (onX && onZ) {
+            put(x, y, z, corner)
+            continue
+          }
+          if (floor === 0 && x === 0 && z === halfZ && y <= 1) {
+            continue
+          }
+          if (lastRow && (spec.trim || floor === floors - 1)) {
+            put(x, y, z, accent)
+            continue
+          }
+          const along = onZ ? x : z
+          const half = onZ ? halfX : halfZ
+          const windowRow = dy === 1 || (dy === 2 && top >= 4)
+          const frontDoorArea = floor === 0 && z === halfZ && Math.abs(x) <= 1
+          let glass = false
+          if (windowRow && !frontDoorArea && Math.abs(along) < half) {
+            if (spec.windows === 'band') {
+              glass = true
+            } else if (spec.windows === 'pairs') {
+              glass = along !== 0 && Math.abs(along) % 2 === 0
+            } else {
+              glass = Math.abs(along) === half - 1
+            }
+          }
+          put(x, y, z, glass ? 'glass' : wall)
+        }
+      }
+    }
+  }
+
+  put(0, 2, halfZ, 'lamp')
+  if (spec.awning) {
+    for (let x = -1; x <= 1; x++) {
+      put(x, 2, halfZ + 1, roofBlock)
+    }
+  }
+
+  let roofTop = height
+  if (spec.roof === 'flat' || spec.roof === 'battlement') {
     for (let x = -halfX; x <= halfX; x++) {
       for (let z = -halfZ; z <= halfZ; z++) {
-        const onX = Math.abs(x) === halfX
-        const onZ = Math.abs(z) === halfZ
-        if (!onX && !onZ) {
+        put(x, height, z, spec.roof === 'flat' ? wall : 'stoneBrick')
+      }
+    }
+    for (let x = -halfX - 1; x <= halfX + 1; x++) {
+      for (let z = -halfZ - 1; z <= halfZ + 1; z++) {
+        const edge = Math.abs(x) === halfX + 1 || Math.abs(z) === halfZ + 1
+        if (!edge) {
           continue
         }
-        const id = paint(x, y, z, { corner: onX && onZ, face: onX && onZ ? null : onZ ? 'z' : 'x' })
-        if (id) {
-          cells.push([x, y, z, id])
+        put(x, height, z, accent)
+        if (spec.roof === 'battlement' && (x + z) % 2 === 0) {
+          put(x, height + 1, z, accent)
         }
       }
     }
-  }
-  return cells
-}
-
-function slab(halfX: number, halfZ: number, y: number, id: BlockId, cells: Cell[]) {
-  for (let x = -halfX; x <= halfX; x++) {
-    for (let z = -halfZ; z <= halfZ; z++) {
-      cells.push([x, y, z, id])
-    }
-  }
-}
-
-function rim(halfX: number, halfZ: number, y: number, id: BlockId, cells: Cell[], every = 1) {
-  for (let x = -halfX; x <= halfX; x++) {
-    for (let z = -halfZ; z <= halfZ; z++) {
-      if ((Math.abs(x) === halfX || Math.abs(z) === halfZ) && (x + z) % every === 0) {
-        cells.push([x, y, z, id])
-      }
-    }
-  }
-}
-
-const isDoor = (x: number, y: number, z: number, halfZ: number) => x === 0 && z === halfZ && y <= 1
-
-function house(color: string): Blueprint {
-  const halfX = 3
-  const halfZ = 3
-  const cells = box(halfX, halfZ, 5, (x, y, z, edge) => {
-    if (isDoor(x, y, z, halfZ)) {
-      return null
-    }
-    if (edge.corner) {
-      return 'log'
-    }
-    if (y === 4) {
-      return `accent:${color}`
-    }
-    const along = edge.face === 'z' ? x : z
-    if ((y === 1 || y === 2) && Math.abs(along) === 2) {
-      return 'glass'
-    }
-    if (y === 3 && z === halfZ && Math.abs(x) === 1) {
-      return 'lamp'
-    }
-    return 'planks'
-  })
-  for (let level = 0; level < 5; level++) {
-    const half = 4 - level
-    slab(half, half, 5 + level, `roof:${color}`, cells)
-  }
-  return { cells, halfX, halfZ, height: 10 }
-}
-
-function tower(color: string): Blueprint {
-  const halfX = 2
-  const halfZ = 2
-  const height = 13
-  const cells = box(halfX, halfZ, height, (x, y, z, edge) => {
-    if (isDoor(x, y, z, halfZ)) {
-      return null
-    }
-    if (edge.corner) {
-      return 'stone'
-    }
-    if (y === height - 1 || y === 6) {
-      return `accent:${color}`
-    }
-    const along = edge.face === 'z' ? x : z
-    if (along === 0 && (y === 4 || y === 9 || y === 10)) {
-      return 'glass'
-    }
-    return 'stoneBrick'
-  })
-  slab(halfX, halfZ, height, 'stoneBrick', cells)
-  rim(halfX + 1, halfZ + 1, height, `accent:${color}`, cells)
-  rim(halfX + 1, halfZ + 1, height + 1, `accent:${color}`, cells, 2)
-  cells.push([0, height + 1, 0, 'lamp'], [0, 2, halfZ, 'lamp'])
-  return { cells, halfX, halfZ, height: height + 2 }
-}
-
-function library(color: string): Blueprint {
-  const halfX = 4
-  const halfZ = 3
-  const height = 6
-  const cells = box(halfX, halfZ, height, (x, y, z, edge) => {
-    if (isDoor(x, y, z, halfZ)) {
-      return null
-    }
-    if (edge.corner || y === 0) {
-      return 'plaster'
-    }
-    if (y === height - 1) {
-      return `accent:${color}`
-    }
-    const along = edge.face === 'z' ? x : z
-    if (Math.abs(along) % 3 === 0 && along !== 0) {
-      return 'plaster'
-    }
-    if (y >= 1 && y <= 3 && edge.face === 'z' && Math.abs(x) !== 1) {
-      return 'shelf'
-    }
-    if (y >= 2 && y <= 3) {
-      return 'glass'
-    }
-    return 'brick'
-  })
-  slab(halfX + 1, halfZ + 1, height, 'plaster', cells)
-  rim(halfX + 1, halfZ + 1, height + 1, `roof:${color}`, cells)
-  cells.push([-1, 2, halfZ, 'lamp'], [1, 2, halfZ, 'lamp'])
-  return { cells, halfX, halfZ, height: height + 2 }
-}
-
-function gallery(color: string): Blueprint {
-  const halfX = 5
-  const halfZ = 3
-  const height = 5
-  const cells = box(halfX, halfZ, height, (x, y, z, edge) => {
-    if (isDoor(x, y, z, halfZ)) {
-      return null
-    }
-    if (edge.corner || y === 0 || y === height - 1) {
-      return y === height - 1 ? `accent:${color}` : 'plaster'
-    }
-    const along = edge.face === 'z' ? x : z
-    if (Math.abs(along) === 1 && edge.face === 'z') {
-      return 'plaster'
-    }
-    return 'glass'
-  })
-  slab(halfX, halfZ, height, 'plaster', cells)
-  for (const x of [-3, 3]) {
-    cells.push([x, height + 1, 0, `accent:${color}`], [x, height + 2, 0, `accent:${color}`])
-  }
-  cells.push([0, height + 1, 0, `accent:${color}`], [0, height + 2, 0, `accent:${color}`], [0, height + 3, 0, 'lamp'])
-  return { cells, halfX, halfZ, height: height + 4 }
-}
-
-function dome(color: string): Blueprint {
-  const halfX = 4
-  const halfZ = 4
-  const wall = 3
-  const cells = box(halfX, halfZ, wall, (x, y, z, edge) => {
-    if (isDoor(x, y, z, halfZ)) {
-      return null
-    }
-    if (edge.corner) {
-      return 'stone'
-    }
-    return y === wall - 1 ? `accent:${color}` : 'plaster'
-  })
-  const radius = 4.6
-  for (let y = 0; y <= 5; y++) {
-    for (let x = -halfX; x <= halfX; x++) {
-      for (let z = -halfZ; z <= halfZ; z++) {
-        const d = Math.hypot(x, y * 1.05, z)
-        if (d <= radius && d > radius - 1.2) {
-          cells.push([x, wall + y, z, y % 2 ? 'glass' : `accent:${color}`])
+    roofTop = height + (spec.roof === 'battlement' ? 2 : 1)
+  } else if (spec.roof === 'pyramid') {
+    let level = 0
+    for (let hx = halfX + 1, hz = halfZ + 1; hx >= 0 && hz >= 0; hx--, hz--, level++) {
+      for (let x = -hx; x <= hx; x++) {
+        for (let z = -hz; z <= hz; z++) {
+          put(x, height + level, z, roofBlock)
         }
       }
     }
+    roofTop = height + level
+  } else if (spec.roof === 'gable') {
+    let level = 0
+    for (let hz = halfZ + 1; hz >= 0; hz--, level++) {
+      for (let x = -halfX - 1; x <= halfX + 1; x++) {
+        for (let z = -hz; z <= hz; z++) {
+          const inner = Math.abs(z) < hz && Math.abs(x) === halfX
+          put(x, height + level, z, Math.abs(z) === hz || Math.abs(x) > halfX ? roofBlock : inner ? wall : roofBlock)
+        }
+      }
+    }
+    roofTop = height + level
+  } else {
+    const radius = Math.max(halfX, halfZ) + 0.6
+    let level = 0
+    for (let y = 0; y <= Math.ceil(radius); y++) {
+      for (let x = -halfX; x <= halfX; x++) {
+        for (let z = -halfZ; z <= halfZ; z++) {
+          const d = Math.hypot(x, y * 1.05, z)
+          if (d <= radius && d > radius - 1.3) {
+            put(x, height + y, z, y % 2 ? 'glass' : accent)
+            level = Math.max(level, y + 1)
+          }
+        }
+      }
+    }
+    roofTop = height + level
   }
-  cells.push([0, wall + 5, 0, 'lamp'])
-  return { cells, halfX, halfZ, height: wall + 6 }
-}
 
-function portal(color: string): Blueprint {
-  const halfX = 3
-  const halfZ = 2
-  const height = 4
-  const cells = box(halfX, halfZ, height, (x, y, z, edge) => {
-    if (isDoor(x, y, z, halfZ)) {
-      return null
+  if (spec.extra === 'chimney') {
+    const cx = halfX - 1
+    const cz = -halfZ + 1
+    for (let y = height; y <= roofTop + 1; y++) {
+      put(cx, y, cz, 'stoneBrick')
     }
-    if (edge.corner) {
-      return 'log'
+    roofTop += 2
+  } else if (spec.extra === 'flag') {
+    for (let y = roofTop; y < roofTop + 4; y++) {
+      put(halfX, y, -halfZ, 'log')
     }
-    if (y === height - 1) {
-      return `accent:${color}`
+    for (let y = roofTop + 2; y < roofTop + 4; y++) {
+      for (let x = halfX - 3; x < halfX; x++) {
+        put(x, y, -halfZ, accent)
+      }
     }
-    return 'stoneBrick'
-  })
-  slab(halfX, halfZ, height, `roof:${color}`, cells)
-  for (let y = 0; y < 5; y++) {
-    cells.push([halfX, height + 1 + y, -halfZ, 'log'])
+    roofTop += 4
+  } else if (spec.extra === 'beacon') {
+    put(0, roofTop, 0, 'lamp')
+    roofTop += 1
   }
-  for (let y = 0; y < 2; y++) {
-    for (let x = 1; x <= 3; x++) {
-      cells.push([halfX - x, height + 4 - y, -halfZ, `accent:${color}`])
-    }
-  }
-  cells.push([-1, 2, halfZ, 'lamp'], [1, 2, halfZ, 'lamp'])
-  return { cells, halfX, halfZ, height: height + 6 }
-}
 
-const blueprints: Record<WorldObjectType, (color: string) => Blueprint> = {
-  building: house,
-  tower,
-  library,
-  gallery,
-  dome,
-  portal,
-}
-
-export function blueprint(type: WorldObjectType, color: string): Blueprint {
-  return (blueprints[type] ?? house)(color)
+  return { cells: [...cells.values()], halfX, halfZ, height: roofTop }
 }
 
 export function rotateCell(x: number, z: number, quarter: number): [number, number] {

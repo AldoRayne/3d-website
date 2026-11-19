@@ -177,7 +177,7 @@ onMounted(async () => {
     aiEnabled.value = world.ai
     if (webgl && stage.value) {
       scene.value = new WorldScene(stage.value, { reducedMotion, onObjectClick, onZoneChange })
-      scene.value.setObjects(world.objects)
+      scene.value.setObjects(world.objects, world.island.radius)
       let lastDoor: string | null = null
       storage((store) => {
         lastDoor = store.getItem(LAST_DOOR_KEY)

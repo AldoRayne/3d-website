@@ -15,7 +15,7 @@ export default defineConfig({
     target: 'es2022',
     chunkSizeWarningLimit: 1200,
     rollupOptions: {
-      input: 'src/main.ts',
+      input: { main: 'src/main.ts', admin: 'src/admin.ts', building: 'src/building-meta.ts' },
     },
   },
 })

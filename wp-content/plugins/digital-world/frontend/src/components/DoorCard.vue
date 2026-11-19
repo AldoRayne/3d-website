@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorldObject } from '@/types'
-import { typeLabels } from '@/labels'
+import { describeBuilding } from '@/labels'
 
 defineProps<{ object: WorldObject; touch: boolean }>()
 const emit = defineEmits<{ enter: [] }>()
@@ -8,7 +8,7 @@ const emit = defineEmits<{ enter: [] }>()
 
 <template>
   <aside class="dw-panel" :style="{ '--dw-accent': object.color }" aria-live="polite">
-    <span class="dw-panel__type">{{ typeLabels[object.type] }}</span>
+    <span class="dw-panel__type">{{ describeBuilding(object.seed) }}</span>
     <h2 class="dw-panel__title">{{ object.title }}</h2>
     <p v-if="object.description" class="dw-panel__desc">{{ object.description }}</p>
     <div v-if="object.url" class="dw-panel__actions">

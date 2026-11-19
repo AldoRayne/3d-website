@@ -1,22 +1,15 @@
-export type WorldObjectType = 'building' | 'tower' | 'dome' | 'library' | 'gallery' | 'portal'
-
-export type WorldAnimation = 'none' | 'floating' | 'rotating' | 'pulse'
-
 export type DoorSide = 'auto' | 'north' | 'east' | 'south' | 'west'
 
 export interface WorldObject {
   id: number
   slug: string
   title: string
-  type: WorldObjectType
+  seed: number
   description: string
   keywords: string[]
   color: string
-  animation: WorldAnimation
-  scale: number
   door: DoorSide
-  position: { x: number; y: number; z: number }
-  model: string | null
+  position: { x: number; z: number }
   page_id: number | null
   url: string | null
   page_title: string | null
@@ -25,6 +18,7 @@ export interface WorldObject {
 export interface WorldResponse {
   site: { name: string; home: string }
   ai: boolean
+  island: { radius: number }
   objects: WorldObject[]
 }
 

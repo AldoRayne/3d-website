@@ -1,10 +1,7 @@
-import type { WorldObjectType } from '@/types'
+import { describeBuilding, specFromSeed } from '@/world/buildings'
 
-export const typeLabels: Record<WorldObjectType, string> = {
-  building: 'Будівля',
-  tower: 'Вежа',
-  dome: 'Купол',
-  library: 'Бібліотека',
-  gallery: 'Галерея',
-  portal: 'Портал',
+export function buildingKind(seed: number) {
+  return describeBuilding(seed).split(',').slice(0, 2).join(' ·')
 }
+
+export { describeBuilding, specFromSeed }

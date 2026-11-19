@@ -1,20 +1,54 @@
 {
-  "node_modules/three/examples/jsm/loaders/GLTFLoader.js": {
-    "file": "assets/GLTFLoader-DtCV8W4i.js",
-    "name": "GLTFLoader",
-    "src": "node_modules/three/examples/jsm/loaders/GLTFLoader.js",
-    "isDynamicEntry": true,
+  "_WorldModel-C_YE28DS.js": {
+    "file": "assets/WorldModel-C_YE28DS.js",
+    "name": "WorldModel",
     "imports": [
-      "src/main.ts"
+      "_buildings-D92DSDqU.js"
+    ]
+  },
+  "_buildings-D92DSDqU.js": {
+    "file": "assets/buildings-D92DSDqU.js",
+    "name": "buildings"
+  },
+  "_preview-CDxcuptg.js": {
+    "file": "assets/preview-CDxcuptg.js",
+    "name": "preview"
+  },
+  "src/admin.ts": {
+    "file": "assets/admin-Dnm6SkvE.js",
+    "name": "admin",
+    "src": "src/admin.ts",
+    "isEntry": true,
+    "imports": [
+      "_WorldModel-C_YE28DS.js",
+      "_buildings-D92DSDqU.js",
+      "_preview-CDxcuptg.js"
+    ],
+    "css": [
+      "assets/admin-WEr3Wm2r.css"
+    ]
+  },
+  "src/building-meta.ts": {
+    "file": "assets/building--_u9xwy1.js",
+    "name": "building",
+    "src": "src/building-meta.ts",
+    "isEntry": true,
+    "imports": [
+      "_buildings-D92DSDqU.js",
+      "_preview-CDxcuptg.js"
+    ],
+    "css": [
+      "assets/building-BA3ApuxC.css"
     ]
   },
   "src/main.ts": {
-    "file": "assets/main-BdmUAJkw.js",
+    "file": "assets/main-DL8Wvh1Y.js",
     "name": "main",
     "src": "src/main.ts",
     "isEntry": true,
-    "dynamicImports": [
-      "node_modules/three/examples/jsm/loaders/GLTFLoader.js"
+    "imports": [
+      "_WorldModel-C_YE28DS.js",
+      "_buildings-D92DSDqU.js"
     ],
     "css": [
       "assets/main-CpB-_jbP.css"

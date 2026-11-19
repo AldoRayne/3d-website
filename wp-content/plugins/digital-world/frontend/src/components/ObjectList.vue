@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { WorldObject } from '@/types'
-import { typeLabels } from '@/labels'
+import { buildingKind } from '@/labels'
 
 defineProps<{
   objects: WorldObject[]
@@ -65,7 +65,7 @@ function choose(slug: string) {
             <span class="dw-list__swatch" aria-hidden="true" />
             <span class="dw-list__text">
               <span class="dw-list__title">{{ object.title }}</span>
-              <span class="dw-list__type">{{ typeLabels[object.type] }}</span>
+              <span class="dw-list__type">{{ buildingKind(object.seed) }}</span>
             </span>
           </button>
         </li>

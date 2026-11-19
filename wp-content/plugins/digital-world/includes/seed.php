@@ -14,11 +14,8 @@ function digital_world_demo_content() {
 				'content' => '<p>We are a small product studio. We design and build websites, platforms and interactive experiences for companies that want their content to be explored, not just scrolled.</p><p>Founded in 2016, the team has shipped more than 120 projects for clients in finance, retail and education.</p>',
 			),
 			'object'    => array(
-				'type'      => 'tower',
 				'color'     => '#5eead4',
-				'animation' => 'pulse',
 				'position'  => array( 0, 0, 0 ),
-				'scale'     => 1.25,
 				'keywords'  => 'about, company, team, who we are, про нас, компанія, команда, хто ми',
 			),
 		),
@@ -30,11 +27,8 @@ function digital_world_demo_content() {
 				'content' => '<p>What we do:</p><ul><li>WordPress and headless web development</li><li>Interactive 3D experiences with Three.js</li><li>AI assistants and content automation</li><li>Long-term product support</li></ul>',
 			),
 			'object'    => array(
-				'type'      => 'building',
 				'color'     => '#60a5fa',
-				'animation' => 'none',
 				'position'  => array( 14, 0, -4 ),
-				'scale'     => 1,
 				'keywords'  => 'services, what we do, development, offer, послуги, що ми робимо, розробка, пропозиція',
 			),
 		),
@@ -46,11 +40,8 @@ function digital_world_demo_content() {
 				'content' => '<p>Notes from the studio: articles about web development, real-time 3D in the browser and practical AI.</p>',
 			),
 			'object'    => array(
-				'type'      => 'library',
 				'color'     => '#a78bfa',
-				'animation' => 'floating',
 				'position'  => array( -13, 0, -6 ),
-				'scale'     => 1,
 				'keywords'  => 'blog, news, articles, posts, library, блог, новини, статті, бібліотека',
 			),
 		),
@@ -62,11 +53,8 @@ function digital_world_demo_content() {
 				'content' => '<p>Selected work:</p><ul><li>FinPulse — a real-time dashboard for a fintech startup</li><li>Northwind Store — a WooCommerce platform for 40k products</li><li>EduVerse — a 3D campus for an online university</li></ul>',
 			),
 			'object'    => array(
-				'type'      => 'gallery',
 				'color'     => '#f472b6',
-				'animation' => 'none',
 				'position'  => array( 6, 0, 13 ),
-				'scale'     => 1,
 				'keywords'  => 'portfolio, projects, cases, work, finance, fintech, портфоліо, проєкти, кейси, роботи, фінанси',
 			),
 		),
@@ -78,11 +66,8 @@ function digital_world_demo_content() {
 				'content' => '<p>Tell us about your project: hello@example.com.</p>',
 			),
 			'object'    => array(
-				'type'      => 'portal',
 				'color'     => '#fbbf24',
-				'animation' => 'rotating',
 				'position'  => array( -8, 0, 12 ),
-				'scale'     => 1,
 				'keywords'  => 'contact, email, write, hire, контакти, звʼязатися, написати, замовити',
 			),
 		),
@@ -114,13 +99,9 @@ function digital_world_seed_demo() {
 
 		$object = $item['object'];
 		$meta   = array(
-			'dw_object_type' => $object['type'],
 			'dw_color'       => $object['color'],
-			'dw_animation'   => $object['animation'],
 			'dw_position_x'  => $object['position'][0],
-			'dw_position_y'  => $object['position'][1],
 			'dw_position_z'  => $object['position'][2],
-			'dw_scale'       => $object['scale'],
 			'dw_linked_page' => $page_id,
 			'dw_description' => $item['page']['excerpt'],
 			'dw_keywords'    => $object['keywords'],

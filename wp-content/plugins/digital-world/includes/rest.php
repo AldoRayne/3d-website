@@ -57,6 +57,59 @@ function digital_world_register_routes() {
 			),
 		)
 	);
+
+	register_rest_route(
+		DIGITAL_WORLD_REST_NS,
+		'/objects/(?P<id>\\d+)',
+		array(
+			'methods'             => WP_REST_Server::EDITABLE,
+			'callback'            => 'digital_world_rest_update_object',
+			'permission_callback' => 'digital_world_rest_can_edit',
+			'args'                => array(
+				'x'     => array(
+					'type'    => 'integer',
+					'minimum' => -DIGITAL_WORLD_MAX_RADIUS,
+					'maximum' => DIGITAL_WORLD_MAX_RADIUS,
+				),
+				'z'     => array(
+					'type'    => 'integer',
+					'minimum' => -DIGITAL_WORLD_MAX_RADIUS,
+					'maximum' => DIGITAL_WORLD_MAX_RADIUS,
+				),
+				'door'  => array(
+					'type' => 'string',
+					'enum' => array_keys( DIGITAL_WORLD_DOOR_SIDES ),
+				),
+				'seed'  => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+					'maximum' => DIGITAL_WORLD_MAX_SEED,
+				),
+				'color' => array(
+					'type'    => 'string',
+					'pattern' => '^#[0-9a-fA-F]{6}$',
+				),
+			),
+		)
+	);
+
+	register_rest_route(
+		DIGITAL_WORLD_REST_NS,
+		'/settings',
+		array(
+			'methods'             => WP_REST_Server::EDITABLE,
+			'callback'            => 'digital_world_rest_update_settings',
+			'permission_callback' => 'digital_world_rest_can_edit',
+			'args'                => array(
+				'island_radius' => array(
+					'type'     => 'integer',
+					'required' => true,
+					'minimum'  => DIGITAL_WORLD_MIN_RADIUS,
+					'maximum'  => DIGITAL_WORLD_MAX_RADIUS,
+				),
+			),
+		)
+	);
 }
 
 function digital_world_rest_world() {
@@ -67,6 +120,7 @@ function digital_world_rest_world() {
 				'home' => home_url( '/' ),
 			),
 			'ai'      => digital_world_ai_enabled(),
+			'island'  => array( 'radius' => digital_world_island_radius() ),
 			'objects' => digital_world_get_objects(),
 		)
 	);
@@ -125,4 +179,45 @@ function digital_world_rest_navigate( WP_REST_Request $request ) {
 	$history = digital_world_sanitize_history( $request->get_param( 'history' ) );
 
 	return rest_ensure_response( digital_world_navigate( $message, $history ) );
+}
+
+function digital_world_rest_can_edit() {
+	return current_user_can( 'manage_options' );
+}
+
+const DIGITAL_WORLD_EDITABLE_META = array(
+	'x'     => 'dw_position_x',
+	'z'     => 'dw_position_z',
+	'door'  => 'dw_door_side',
+	'seed'  => DIGITAL_WORLD_SEED_META,
+	'color' => 'dw_color',
+);
+
+function digital_world_rest_update_object( WP_REST_Request $request ) {
+	$post = get_post( (int) $request['id'] );
+	if ( ! $post || DIGITAL_WORLD_CPT !== $post->post_type ) {
+		return new WP_Error( 'digital_world_not_found', 'World object not found.', array( 'status' => 404 ) );
+	}
+
+	foreach ( DIGITAL_WORLD_EDITABLE_META as $param => $meta_key ) {
+		if ( ! $request->has_param( $param ) ) {
+			continue;
+		}
+		$value = $request->get_param( $param );
+		if ( 'color' === $param ) {
+			$value = sanitize_hex_color( $value );
+		}
+		update_post_meta( $post->ID, $meta_key, $value );
+		if ( DIGITAL_WORLD_SEED_META !== $meta_key ) {
+			update_post_meta( $post->ID, '_' . $meta_key, 'field_' . $meta_key );
+		}
+	}
+
+	digital_world_flush_cache();
+	return rest_ensure_response( digital_world_format_object( get_post( $post->ID ) ) );
+}
+
+function digital_world_rest_update_settings( WP_REST_Request $request ) {
+	update_option( DIGITAL_WORLD_RADIUS_OPTION, (int) $request['island_radius'], false );
+	return rest_ensure_response( array( 'island_radius' => digital_world_island_radius() ) );
 }
