@@ -410,7 +410,7 @@ export class WorldModel {
               if (trimmed || (dx === 0 && dz === 0 && y < trunk)) {
                 continue
               }
-              grid.set(x + dx, y, z + dz, 'leaves')
+              grid.set(x + dx, y, z + dz, 'foliage')
             }
           }
         }

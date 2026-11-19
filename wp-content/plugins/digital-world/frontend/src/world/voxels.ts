@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { seeThrough } from './foliage'
 import { texture } from './textures'
 
 export type BlockId = string
@@ -46,6 +47,9 @@ export function blockDef(id: BlockId): BlockDef {
       break
     case 'leaves':
       def = { materials: lambert(texture('leaves')), opaque: true }
+      break
+    case 'foliage':
+      def = { materials: seeThrough(lambert(texture('leaves'))), opaque: true }
       break
     case 'lamp':
       def = { materials: lambert(texture('lamp'), { emissive: new THREE.Color('#ffcf5a'), emissiveIntensity: 0.9 }), opaque: true }

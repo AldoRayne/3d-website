@@ -5,6 +5,7 @@ import { CSS3DRenderer } from 'three/addons/renderers/CSS3DRenderer.js'
 import type { CameraTransition, WorldObject } from '@/types'
 import { isEditableTarget } from './dom'
 import { pushOut } from './navigation'
+import { foliageUniforms } from './foliage'
 import { Interior, PRINT_OPACITY, SHEET_COUNT, snapshotPage } from './interior'
 import { Player, PLAYER_RADIUS } from './Player'
 import { WorldModel, type Building } from './WorldModel'
@@ -27,6 +28,7 @@ const WALK_SPEED = 5.2
 const TURN_SPEED = 2.6
 const EYE = new THREE.Vector3(0, 1.6, 0)
 const UP = new THREE.Vector3(0, 1, 0)
+const SEE_TARGET = new THREE.Vector3(0, 1.3, 0)
 const KEYS = {
   forward: ['ArrowUp', 'KeyW'],
   back: ['ArrowDown', 'KeyS'],
@@ -887,6 +889,12 @@ export class WorldScene {
     }
     this.sun.position.set(this.player.position.x + 28, 46, this.player.position.z + 18)
     this.sun.target.position.copy(this.player.position)
+    if (this.activeScene === this.scene) {
+      foliageUniforms.uSeeFrom.value.copy(this.camera.position)
+      foliageUniforms.uSeeTo.value.copy(this.player.position).add(SEE_TARGET)
+      foliageUniforms.uSeeStrength.value = 1
+      foliageUniforms.uSeeCell.value = this.renderer.getPixelRatio()
+    }
     this.renderer.render(this.activeScene, this.camera)
     if (this.activeScene === this.scene) {
       this.labels.render(this.scene, this.camera)
@@ -911,6 +919,7 @@ export class WorldScene {
   dispose() {
     this.disposed = true
     cancelAnimationFrame(this.frame)
+    foliageUniforms.uSeeStrength.value = 0
     this.leaveInterior()
     this.cancelWalk()
     this.resizeObserver.disconnect()
