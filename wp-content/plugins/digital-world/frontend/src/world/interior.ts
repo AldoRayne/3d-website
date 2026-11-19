@@ -9,7 +9,11 @@ const PAPER = '#f4ecd9'
 const PAGE_HEIGHT = 0.62
 const BOOK_TILT = 0.38
 const BLOCK_TOP = 0.085
-const SEGMENTS = 14
+const SEGMENTS = 24
+const ROWS = 8
+const CORNER_LEAD = 0.3
+const CURL = 2.8
+const SHADOW = 0.38
 const SHEET_LIFTS = [0.009, 0.006, 0.003]
 const ROOM_HEIGHT = 5
 const SCALE = 2
@@ -116,7 +120,7 @@ export class Book {
   readonly pageHeight = PAGE_HEIGHT
   readonly spread: boolean
   private cover = new THREE.Group()
-  private sheets: Array<{ geometry: THREE.PlaneGeometry; lift: number; meshes: THREE.Mesh[] }> = []
+  private sheets: Array<{ geometry: THREE.PlaneGeometry; lift: number; meshes: THREE.Mesh[]; shadows: THREE.Mesh[] }> = []
   private leftPrint: THREE.Mesh | null = null
   private print: THREE.MeshLambertMaterial
   private lastFront: THREE.MeshLambertMaterial
@@ -166,9 +170,20 @@ export class Book {
     const sheetBack = this.own(new THREE.MeshLambertMaterial({ map: texture('paper'), side: THREE.BackSide }))
     this.lastFront = this.own(new THREE.MeshLambertMaterial({ map: texture('paper'), transparent: true }))
     this.lastBack = this.own(new THREE.MeshLambertMaterial({ map: texture('paper'), side: THREE.BackSide, transparent: true }))
+    const shadowMap = this.own(
+      canvasTexture(64, 1, (ctx) => {
+        const gradient = ctx.createLinearGradient(0, 0, 64, 0)
+        gradient.addColorStop(0, '#999')
+        gradient.addColorStop(0.55, '#fff')
+        gradient.addColorStop(1, '#000')
+        ctx.fillStyle = gradient
+        ctx.fillRect(0, 0, 64, 1)
+      }),
+    )
+    const shadowPlane = this.own(new THREE.PlaneGeometry(1, paperD).rotateX(-Math.PI / 2).translate(0.5, 0, 0))
     SHEET_LIFTS.forEach((lift, index) => {
       const last = index === SHEET_LIFTS.length - 1
-      const geometry = this.own(new THREE.PlaneGeometry(paperW, paperD, SEGMENTS, 1))
+      const geometry = this.own(new THREE.PlaneGeometry(paperW, paperD, SEGMENTS, ROWS))
       const meshes = [last ? this.lastFront : sheetFront, last ? this.lastBack : sheetBack].map((material) => {
         const mesh = new THREE.Mesh(geometry, material)
         mesh.position.set(0, BLOCK_TOP, 0)
@@ -176,7 +191,18 @@ export class Book {
         this.group.add(mesh)
         return mesh
       })
-      this.sheets.push({ geometry, lift, meshes })
+      const below = [SHEET_LIFTS[index + 1] ?? 0.001, -(SHEET_LIFTS[index - 1] ?? 0.012)]
+      const shadows = below.map((height) => {
+        const shadow = new THREE.Mesh(
+          shadowPlane,
+          this.own(new THREE.MeshBasicMaterial({ color: '#000000', alphaMap: shadowMap, transparent: true, depthWrite: false, opacity: 0 })),
+        )
+        shadow.position.set(0, BLOCK_TOP + height + 0.0007, 0)
+        shadow.visible = false
+        this.group.add(shadow)
+        return shadow
+      })
+      this.sheets.push({ geometry, lift, meshes, shadows })
     })
     this.sheets.forEach((_, index) => this.setSheet(index, 0))
 
@@ -254,30 +280,49 @@ export class Book {
   }
 
   setSheet(index: number, t: number) {
-    const { geometry, lift } = this.sheets[index]
+    const { geometry, lift, shadows } = this.sheets[index]
     const width = this.pageWidth * MARGIN
     const depth = this.pageHeight * MARGIN
-    const theta = Math.PI * t
-    const curl = 0.9 * Math.sin(Math.PI * t)
     const step = width / SEGMENTS
-    let x = -lift * Math.sin(theta)
-    let y = lift * Math.cos(theta)
-    const points = [new THREE.Vector2(x, y)]
-    for (let i = 0; i < SEGMENTS; i++) {
-      const phi = theta - curl * ((i + 0.5) / SEGMENTS)
-      x += step * Math.cos(phi)
-      y += step * Math.sin(phi)
-      points.push(new THREE.Vector2(x, y))
-    }
     const position = geometry.attributes.position as THREE.BufferAttribute
-    for (let row = 0; row < 2; row++) {
-      for (let i = 0; i <= SEGMENTS; i++) {
-        position.setXYZ(row * (SEGMENTS + 1) + i, points[i].x, points[i].y, row === 0 ? -depth / 2 : depth / 2)
+    const sides = [
+      { extent: 0, height: 0, count: 0 },
+      { extent: 0, height: 0, count: 0 },
+    ]
+    for (let row = 0; row <= ROWS; row++) {
+      const v = row / ROWS
+      const local = THREE.MathUtils.clamp(t * (1 + CORNER_LEAD) - CORNER_LEAD * (1 - v), 0, 1)
+      const theta = Math.PI * THREE.MathUtils.smoothstep(local, 0.08, 1)
+      const direction = 1 - 1.8 * THREE.MathUtils.smoothstep(local, 0.3, 0.75)
+      const bend = CURL * Math.sin(Math.PI * local) * direction
+      const z = (v - 0.5) * depth
+      let x = -lift * Math.sin(theta)
+      let y = lift * Math.cos(theta)
+      position.setXYZ(row * (SEGMENTS + 1), x, y, z)
+      for (let i = 0; i < SEGMENTS; i++) {
+        const along = (i + 0.5) / SEGMENTS
+        const phi = theta + bend * along * along
+        x += step * Math.cos(phi)
+        y += step * Math.sin(phi)
+        position.setXYZ(row * (SEGMENTS + 1) + i + 1, x, y, z)
+        const side = sides[x >= 0 ? 0 : 1]
+        side.extent = Math.max(side.extent, Math.min(width, Math.abs(x)))
+        side.height += y
+        side.count++
       }
     }
     position.needsUpdate = true
     geometry.computeVertexNormals()
     geometry.computeBoundingSphere()
+
+    const moving = t > 0 && t < 1
+    shadows.forEach((shadow, side) => {
+      const { extent, height, count } = sides[side]
+      const strength = moving && count ? THREE.MathUtils.clamp(height / count / 0.1, 0, 1) : 0
+      shadow.visible = strength > 0.01 && extent > 0.01
+      shadow.scale.x = side === 0 ? extent : -extent
+      ;(shadow.material as THREE.MeshBasicMaterial).opacity = SHADOW * strength
+    })
 
     if (index === this.sheets.length - 1) {
       const landed = t >= 1

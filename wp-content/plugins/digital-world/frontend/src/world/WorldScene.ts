@@ -734,7 +734,7 @@ export class WorldScene {
       state,
       {
         drift: 1,
-        duration: 1.7,
+        duration: 2.3,
         ease: 'sine.inOut',
         onUpdate: () => {
           this.camera.position.lerpVectors(from, near.position, state.drift)
@@ -745,10 +745,10 @@ export class WorldScene {
     )
     state.sheets.forEach((_, index) => {
       const sheet = { t: 0 }
-      tl.to(sheet, { t: 1, duration: 0.6, ease: 'power1.inOut', onUpdate: () => book.setSheet(index, sheet.t) }, 0.5 + index * 0.24)
+      tl.to(sheet, { t: 1, duration: 0.85, ease: 'sine.inOut', onUpdate: () => book.setSheet(index, sheet.t) }, 0.5 + index * 0.32)
     })
-    const lastSheet = 0.5 + (state.sheets.length - 1) * 0.24
-    tl.to(state, { reveal: 1, duration: 0.45, ease: 'power1.inOut', onUpdate: () => book.setReveal(state.reveal) }, lastSheet + 0.65)
+    const lastSheet = 0.5 + (state.sheets.length - 1) * 0.32
+    tl.to(state, { reveal: 1, duration: 0.45, ease: 'power1.inOut', onUpdate: () => book.setReveal(state.reveal) }, lastSheet + 0.9)
     tl.to(
       state,
       {
@@ -761,7 +761,7 @@ export class WorldScene {
           book.setPrint(PRINT_OPACITY * (1 - state.push))
         },
       },
-      Math.max(1.7, lastSheet + 1.1),
+      Math.max(2.3, lastSheet + 1.35),
     )
     return tl
   }
