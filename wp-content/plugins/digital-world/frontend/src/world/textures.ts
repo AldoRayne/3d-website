@@ -304,6 +304,8 @@ export function texture(name: string, arg = '') {
   painters[name](ctx, random(hash(key)), arg)
   const result = new THREE.CanvasTexture(canvas)
   result.magFilter = THREE.NearestFilter
+  result.wrapS = THREE.RepeatWrapping
+  result.wrapT = THREE.RepeatWrapping
   result.minFilter = THREE.NearestMipmapLinearFilter
   result.colorSpace = THREE.SRGBColorSpace
   result.anisotropy = 4
