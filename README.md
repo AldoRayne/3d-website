@@ -34,6 +34,8 @@ WordPress core lives in `wp/`, so the admin is at `/wp/wp-admin/`. Requests to `
 4. Build the frontend only if you changed `frontend/src` (the built `dist/` is in git): in `wp-content/plugins/digital-world/frontend`, run `npm ci`, then `npm run build`.
 5. For a fresh database, run the installer at `/wp/wp-admin/install.php` and activate ACF and Digital World. On first run the plugin creates five demo pages and their buildings.
 
+To deploy on a free Oracle Cloud VM, follow [docs/deploy-oracle.md](docs/deploy-oracle.md).
+
 ## Updating dependencies
 
 ```bash

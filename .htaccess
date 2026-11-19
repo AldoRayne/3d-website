@@ -1,5 +1,6 @@
 RedirectMatch 404 ^/(vendor|node_modules)(/|$)
 RedirectMatch 404 ^/(composer\.(json|lock)|wp-config(-local)?(\.sample)?\.php|README\.md|\.git.*)$
+RedirectMatch 404 ^/docs(/|$)
 RedirectMatch 404 ^/wp-content/plugins/digital-world/(frontend|includes)(/|$)
 
 # BEGIN WordPress
