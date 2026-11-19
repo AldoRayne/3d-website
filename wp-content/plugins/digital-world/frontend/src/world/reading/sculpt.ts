@@ -38,9 +38,13 @@ function riseMaterial(material: THREE.Material, rise: { value: number }, edge = 
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uRise = rise
     if (edge) {
-      shader.fragmentShader = shader.fragmentShader.replace(
+      shader.vertexShader = `attribute float aEdge;\nvarying float vEdge;\n${shader.vertexShader}`.replace(
+        '#include <begin_vertex>',
+        '#include <begin_vertex>\nvEdge = aEdge;',
+      )
+      shader.fragmentShader = `varying float vEdge;\n${shader.fragmentShader}`.replace(
         '#include <color_fragment>',
-        '#include <color_fragment>\ndiffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.80, 0.70), 0.62);',
+        '#include <color_fragment>\ndiffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.80, 0.70), 0.62 * vEdge);',
       )
     }
     shader.vertexShader = `uniform float uRise;\n${shader.vertexShader}`.replace(
@@ -207,10 +211,7 @@ export async function sculptPage(doc: Document, view: { width: number; height: n
     owned.push(item)
     return item
   }
-  const glyphMaterial = [
-    own(riseMaterial(new THREE.MeshLambertMaterial({ color: '#ffffff' }), rise)),
-    own(riseMaterial(new THREE.MeshLambertMaterial({ color: '#ffffff' }), rise, true)),
-  ]
+  const glyphMaterial = own(riseMaterial(new THREE.MeshLambertMaterial({ color: '#ffffff' }), rise, true))
   const buckets = new Map<string, { geometry: THREE.BufferGeometry; matrices: THREE.Matrix4[]; colors: THREE.Color[] }>()
   const bounds = new THREE.Box3()
   const links: Array<{ box: THREE.Box3; href: string }> = []

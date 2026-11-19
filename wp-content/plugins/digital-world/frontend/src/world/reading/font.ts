@@ -23,6 +23,56 @@ export interface LoadedFont {
 }
 
 const loader = new FontLoader()
+
+function markEdges(geometry: THREE.BufferGeometry) {
+  const count = geometry.attributes.position.count
+  const edge = new Float32Array(count)
+  for (const group of geometry.groups) {
+    if (group.materialIndex === 1) {
+      edge.fill(1, group.start, group.start + group.count)
+    }
+  }
+  geometry.setAttribute('aEdge', new THREE.BufferAttribute(edge, 1))
+  geometry.clearGroups()
+  return geometry
+}
+
+export async function warmGlyphs(doc: Document) {
+  const win = doc.defaultView
+  if (!win || !doc.body) {
+    return
+  }
+  await doc.fonts?.ready
+  const wanted = new Map<Weight, Set<string>>()
+  const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT)
+  for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null) {
+    const parent = node.parentElement
+    if (!parent || !node.data.trim() || parent.closest('script, style, noscript, template')) {
+      continue
+    }
+    const css = win.getComputedStyle(parent)
+    const weight = weightOf(css.fontWeight)
+    const text = css.textTransform === 'uppercase' ? node.data.toUpperCase() : css.textTransform === 'lowercase' ? node.data.toLowerCase() : node.data
+    const set = wanted.get(weight) ?? new Set<string>()
+    for (const char of text) {
+      if (char.trim()) {
+        set.add(char)
+      }
+    }
+    wanted.set(weight, set)
+  }
+  for (const [weight, chars] of wanted) {
+    const font = await loadFont(weight)
+    let index = 0
+    for (const char of chars) {
+      font.glyph(char)
+      if (++index % 6 === 0) {
+        await new Promise((resolve) => window.setTimeout(resolve, 0))
+      }
+    }
+  }
+}
+
 const fonts = new Map<Weight, Promise<LoadedFont>>()
 
 export function weightOf(css: string): Weight {
@@ -52,14 +102,7 @@ export function loadFont(weight: Weight) {
             if (source) {
               const shapes = font.generateShapes(char, 1)
               const geometry = shapes.length
-                ? new THREE.ExtrudeGeometry(shapes, {
-                    depth: 1,
-                    curveSegments: 4,
-                    bevelEnabled: true,
-                    bevelThickness: 0.04,
-                    bevelSize: 0.01,
-                    bevelSegments: 1,
-                  })
+                ? markEdges(new THREE.ExtrudeGeometry(shapes, { depth: 1, curveSegments: 3, bevelEnabled: false }))
                 : new THREE.BufferGeometry()
               result = { geometry, advance: source.ha / data.resolution }
             }

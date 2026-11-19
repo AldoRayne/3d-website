@@ -8,7 +8,7 @@ import { pushOut } from './navigation'
 import { foliageUniforms } from './foliage'
 import { Interior, PRINT_OPACITY, SHEET_COUNT, snapshotPage } from './interior'
 import { BookSpace } from './reading/BookSpace'
-import { loadFont } from './reading/font'
+import { loadFont, warmGlyphs } from './reading/font'
 import { sculptPage, type Sculpture } from './reading/sculpt'
 import { Player, PLAYER_RADIUS } from './Player'
 import { WorldModel, type Building } from './WorldModel'
@@ -61,6 +61,10 @@ export class WorldScene {
   private interior: Interior | null = null
   private finish: (() => void) | null = null
   private speed = 1
+  private maxRatio = 1
+  private minRatio = 1
+  private ratio = 1
+  private pace = { frames: 0, time: 0, refresh: 0, calm: 0, cooldown: 0 }
   private camera: THREE.PerspectiveCamera
   private timer = new THREE.Timer()
   private raycaster = new THREE.Raycaster()
@@ -105,8 +109,11 @@ export class WorldScene {
     this.pages.domElement.classList.add('dw-pages')
     container.appendChild(this.pages.domElement)
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' })
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    this.maxRatio = Math.min(window.devicePixelRatio || 1, 2)
+    this.minRatio = this.maxRatio >= 2 ? 1 : 0.75
+    this.ratio = this.maxRatio
+    this.renderer = new THREE.WebGLRenderer({ antialias: this.maxRatio < 2, alpha: true, powerPreference: 'high-performance' })
+    this.renderer.setPixelRatio(this.ratio)
     this.renderer.setSize(width, height)
     this.renderer.shadowMap.enabled = this.shadows
     this.renderer.shadowMap.type = THREE.PCFShadowMap
@@ -533,6 +540,7 @@ export class WorldScene {
     const page = this.openPage(url)
     const interior = new Interior(entry.object, page.width / page.height, page.frame, page.height)
     this.interior = interior
+    void page.loaded.then(() => (page.frame.contentDocument ? warmGlyphs(page.frame.contentDocument) : undefined)).catch(() => undefined)
     const ready = page.loaded
       .then(() => (interior.book.spread ? Promise.race([snapshotPage(page.frame, page.width, page.height), wait(3000)]) : null))
       .then((image) => {
@@ -1004,14 +1012,53 @@ export class WorldScene {
     }
   }
 
+  private adaptResolution(dt: number) {
+    const pace = this.pace
+    if (dt > 0.25) {
+      pace.frames = 0
+      pace.time = 0
+      return
+    }
+    pace.frames++
+    pace.time += dt
+    pace.cooldown = Math.max(0, pace.cooldown - dt)
+    if (pace.time < 1) {
+      return
+    }
+    const fps = pace.frames / pace.time
+    pace.frames = 0
+    pace.time = 0
+    pace.refresh = Math.max(pace.refresh * 0.98, fps)
+    let next = this.ratio
+    if (fps < 50 && fps < pace.refresh * 0.8 && pace.cooldown === 0) {
+      next = Math.max(this.minRatio, this.ratio - 0.25)
+      pace.calm = 0
+    } else if (fps > pace.refresh * 0.95) {
+      pace.calm++
+      if (pace.calm >= 3) {
+        next = Math.min(this.maxRatio, this.ratio + 0.25)
+        pace.calm = 0
+      }
+    } else {
+      pace.calm = 0
+    }
+    if (next !== this.ratio) {
+      this.ratio = next
+      this.renderer.setPixelRatio(next)
+      pace.cooldown = 1.5
+    }
+  }
+
   private loop = () => {
     if (this.disposed) {
       return
     }
     this.frame = requestAnimationFrame(this.loop)
     this.timer.update()
-    const dt = Math.min(this.timer.getDelta(), 0.1)
+    const raw = this.timer.getDelta()
+    const dt = Math.min(raw, 0.1)
     const elapsed = this.timer.getElapsed()
+    this.adaptResolution(raw)
     if (this.reading && this.space) {
       this.space.update(dt, elapsed)
     }
