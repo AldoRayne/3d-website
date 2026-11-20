@@ -6,6 +6,17 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 const DIGITAL_WORLD_ACTIONS     = array( 'navigate', 'open', 'overview', 'none' );
 const DIGITAL_WORLD_TRANSITIONS = array( 'fly', 'instant' );
+const DIGITAL_WORLD_STAND_SLUG  = '@stand';
+
+function digital_world_stand_target() {
+	return array(
+		'slug'        => DIGITAL_WORLD_STAND_SLUG,
+		'title'       => 'Книга гостей',
+		'description' => 'Стенд із книгою в центрі острова: реєстрація, вхід і власна розкладка острова.',
+		'keywords'    => array( 'guest book', 'sign in', 'log in', 'login', 'register', 'sign up', 'account', 'profile', 'my island', 'книга гостей', 'книга', 'реєстрац', 'зареєстр', 'увійти', 'вхід', 'залогін', 'акаунт', 'профіль', 'мій острів', 'стенд' ),
+		'page_title'  => null,
+	);
+}
 
 function digital_world_ai_model() {
 	return apply_filters( 'digital_world_ai_model', 'claude-opus-5-5' );
@@ -21,7 +32,7 @@ function digital_world_ai_enabled() {
 }
 
 function digital_world_navigate( $message, array $history = array() ) {
-	$objects = digital_world_get_objects();
+	$objects = array_merge( digital_world_get_objects(), array( digital_world_stand_target() ) );
 
 	if ( digital_world_ai_enabled() ) {
 		try {
@@ -78,6 +89,8 @@ function digital_world_system_prompt( array $objects ) {
 
 	return <<<PROMPT
 You are the AI Navigator of "{$site}", a website presented as an explorable 3D world. Every section of the site is a building the visitor can walk to.
+
+One catalog entry, "@stand", is not a building but the guest book stand in the middle of the island, where visitors register, sign in and arrange their own island. Walking there works the same way; "open" also opens the book.
 
 Your job is to read the visitor's message and walk their character to the right building, then say one or two short sentences about where you took them and what they will find there. The visitor enters a building themselves.
 
