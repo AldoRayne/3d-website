@@ -239,29 +239,42 @@ export function generateBuilding(seed: number, color: string): Blueprint {
     roofTop = height + level
   }
 
+  const columnTop = (x: number, z: number) => {
+    let top = -1
+    for (const [cx, cy, cz] of cells.values()) {
+      if (cx === x && cz === z && cy > top) {
+        top = cy
+      }
+    }
+    return top
+  }
+
   if (spec.extra === 'chimney') {
     const cx = halfX - 1
     const cz = -halfZ + 1
     for (let y = height; y <= roofTop + 1; y++) {
       put(cx, y, cz, 'stoneBrick')
     }
-    roofTop += 2
   } else if (spec.extra === 'flag') {
-    for (let y = roofTop; y < roofTop + 4; y++) {
+    const base = columnTop(halfX, -halfZ) + 1
+    let cloth = base + 2
+    for (let x = halfX - 3; x < halfX; x++) {
+      cloth = Math.max(cloth, columnTop(x, -halfZ) + 1)
+    }
+    for (let y = base; y < cloth + 2; y++) {
       put(halfX, y, -halfZ, 'log')
     }
-    for (let y = roofTop + 2; y < roofTop + 4; y++) {
+    for (let y = cloth; y < cloth + 2; y++) {
       for (let x = halfX - 3; x < halfX; x++) {
         put(x, y, -halfZ, accent)
       }
     }
-    roofTop += 4
   } else if (spec.extra === 'beacon') {
-    put(0, roofTop, 0, 'lamp')
-    roofTop += 1
+    put(0, columnTop(0, 0) + 1, 0, 'lamp')
   }
 
-  return { cells: [...cells.values()], halfX, halfZ, height: roofTop }
+  const top = Math.max(roofTop, ...[...cells.values()].map(([, y]) => y + 1))
+  return { cells: [...cells.values()], halfX, halfZ, height: top }
 }
 
 export function rotateCell(x: number, z: number, quarter: number): [number, number] {
