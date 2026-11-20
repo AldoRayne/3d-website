@@ -13,7 +13,7 @@ import { loadFont, warmGlyphs } from './reading/font'
 import { sculptPage, type Sculpture } from './reading/sculpt'
 import { Player, PLAYER_RADIUS } from './Player'
 import { WorldModel, type Building } from './WorldModel'
-import { STAND_READ_DISTANCE, STAND_SLUG } from './stand'
+import { STAND_READ_DISTANCE, STAND_READER_DISTANCE, STAND_SLUG } from './stand'
 import { MiniIsland } from './island'
 import type { Placement, PlacementProblem } from './WorldModel'
 
@@ -313,17 +313,28 @@ export class WorldScene {
   }
 
   walkTo(slug: string, transition: CameraTransition = 'fly'): Promise<boolean> {
-    const entry = this.model.buildings.get(slug)
-    if (!entry || this.locked) {
+    const target = this.walkTarget(slug)
+    if (!target || this.locked) {
       return Promise.resolve(false)
     }
-    const doorHeading = headingOf(entry.door.outward.clone().negate())
     if (transition === 'instant' || this.options.reducedMotion) {
       this.cancelWalk()
-      this.placeAt(entry.door.front, doorHeading)
+      this.placeAt(target.point, target.heading)
       return Promise.resolve(true)
     }
-    return this.startWalk(new THREE.Vector2(entry.door.front.x, entry.door.front.z), doorHeading)
+    return this.startWalk(new THREE.Vector2(target.point.x, target.point.z), target.heading)
+  }
+
+  private walkTarget(slug: string) {
+    if (slug === STAND_SLUG) {
+      const { stand } = this.model
+      return {
+        point: stand.position.clone().addScaledVector(stand.facing, STAND_READER_DISTANCE),
+        heading: headingOf(stand.facing.clone().negate()),
+      }
+    }
+    const entry = this.model.buildings.get(slug)
+    return entry ? { point: entry.door.front, heading: headingOf(entry.door.outward.clone().negate()) } : null
   }
 
   private startWalk(goal: THREE.Vector2, face: number | null = null) {

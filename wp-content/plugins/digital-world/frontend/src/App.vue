@@ -341,9 +341,12 @@ function walkTo(slug: string, transition: CameraTransition = 'fly') {
   return scene.value?.walkTo(slug, transition)
 }
 
-function runCommand(command: NavigatorCommand) {
+async function runCommand(command: NavigatorCommand) {
   if ((command.action === 'navigate' || command.action === 'open') && command.target) {
-    void walkTo(command.target, command.camera.transition)
+    const arrived = await walkTo(command.target, command.camera.transition)
+    if (arrived && command.action === 'open' && command.target === STAND_SLUG && atStand.value) {
+      void openBook()
+    }
   } else if (command.action === 'overview') {
     scene.value?.overview()
   }
@@ -480,7 +483,7 @@ onBeforeUnmount(() => {
     <ObjectList
       v-if="objects.length"
       :objects="objects"
-      :active="zone"
+      :active="zone ?? (atStand ? STAND_SLUG : null)"
       :static-mode="!webgl"
       @select="(slug) => walkTo(slug)"
       @overview="scene?.overview()"

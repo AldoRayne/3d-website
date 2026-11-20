@@ -1374,3 +1374,9 @@ kbd {
     padding: 0 10px;
   }
 }
+
+.dw-list__item--stand {
+  margin-top: 6px;
+  border-top: 1px dashed var(--dw-border-strong);
+  border-radius: 0 0 10px 10px;
+}

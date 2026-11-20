@@ -2,6 +2,8 @@
 import { ref } from 'vue'
 import type { WorldObject } from '@/types'
 import { buildingKind } from '@/labels'
+import { currentUser } from '@/auth'
+import { STAND_COLOR, STAND_SLUG, STAND_TITLE } from '@/world/stand'
 
 defineProps<{
   objects: WorldObject[]
@@ -70,6 +72,21 @@ function choose(slug: string) {
           </button>
         </li>
       </ul>
+      <button
+        v-if="!staticMode"
+        type="button"
+        class="dw-list__item dw-list__item--stand"
+        :class="{ 'is-active': active === STAND_SLUG }"
+        :aria-current="active === STAND_SLUG ? 'location' : undefined"
+        :style="{ '--dw-accent': STAND_COLOR }"
+        @click="choose(STAND_SLUG)"
+      >
+        <span class="dw-list__swatch" aria-hidden="true" />
+        <span class="dw-list__text">
+          <span class="dw-list__title">{{ STAND_TITLE }}</span>
+          <span class="dw-list__type">{{ currentUser ? `Ви увійшли як ${currentUser.name}` : 'Реєстрація та вхід' }}</span>
+        </span>
+      </button>
       <button v-if="!staticMode" type="button" class="dw-list__overview" @click="emit('overview')">
         Огляд усього світу
       </button>
