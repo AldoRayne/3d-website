@@ -1,13 +1,13 @@
 {
-  "_WorldModel-qMEPEgof.js": {
-    "file": "assets/WorldModel-qMEPEgof.js",
+  "_WorldModel-0PNaMhYp.js": {
+    "file": "assets/WorldModel-0PNaMhYp.js",
     "name": "WorldModel",
     "imports": [
-      "_buildings-BRy7GBmf.js"
+      "_buildings-Cn1pCzGo.js"
     ]
   },
-  "_buildings-BRy7GBmf.js": {
-    "file": "assets/buildings-BRy7GBmf.js",
+  "_buildings-Cn1pCzGo.js": {
+    "file": "assets/buildings-Cn1pCzGo.js",
     "name": "buildings"
   },
   "_preview-CDxcuptg.js": {
@@ -21,17 +21,17 @@
     "isDynamicEntry": true
   },
   "src/admin.ts": {
-    "file": "assets/admin-BvbAGvVi.js",
+    "file": "assets/admin-Bq6bHr6p.js",
     "name": "admin",
     "src": "src/admin.ts",
     "isEntry": true,
     "imports": [
-      "_WorldModel-qMEPEgof.js",
-      "_buildings-BRy7GBmf.js",
+      "_WorldModel-0PNaMhYp.js",
+      "_buildings-Cn1pCzGo.js",
       "_preview-CDxcuptg.js"
     ],
     "css": [
-      "assets/admin-WEr3Wm2r.css"
+      "assets/admin-DQnJkZiG.css"
     ]
   },
   "src/assets/fonts/manrope-300.json": {
@@ -47,12 +47,12 @@
     "src": "src/assets/fonts/manrope-700.json"
   },
   "src/building-meta.ts": {
-    "file": "assets/building-CT9zRgpz.js",
+    "file": "assets/building-BboNHX3n.js",
     "name": "building",
     "src": "src/building-meta.ts",
     "isEntry": true,
     "imports": [
-      "_buildings-BRy7GBmf.js",
+      "_buildings-Cn1pCzGo.js",
       "_preview-CDxcuptg.js"
     ],
     "css": [
@@ -60,13 +60,13 @@
     ]
   },
   "src/main.ts": {
-    "file": "assets/main-C0PBlaDf.js",
+    "file": "assets/main-CH7nB63Z.js",
     "name": "main",
     "src": "src/main.ts",
     "isEntry": true,
     "imports": [
-      "_WorldModel-qMEPEgof.js",
-      "_buildings-BRy7GBmf.js"
+      "_WorldModel-0PNaMhYp.js",
+      "_buildings-Cn1pCzGo.js"
     ],
     "dynamicImports": [
       "node_modules/modern-screenshot/dist/index.mjs"
