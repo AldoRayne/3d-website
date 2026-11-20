@@ -1,6 +1,6 @@
 {
-  "_WorldModel-BiFPyNcK.js": {
-    "file": "assets/WorldModel-BiFPyNcK.js",
+  "_WorldModel-DMMj99wi.js": {
+    "file": "assets/WorldModel-DMMj99wi.js",
     "name": "WorldModel",
     "imports": [
       "_buildings-Cn1pCzGo.js"
@@ -24,12 +24,12 @@
     "isDynamicEntry": true
   },
   "src/admin.ts": {
-    "file": "assets/admin-BXvg4cH2.js",
+    "file": "assets/admin-LBMoUGoY.js",
     "name": "admin",
     "src": "src/admin.ts",
     "isEntry": true,
     "imports": [
-      "_WorldModel-BiFPyNcK.js",
+      "_WorldModel-DMMj99wi.js",
       "_buildings-Cn1pCzGo.js",
       "_preview-CDxcuptg.js"
     ],
@@ -63,16 +63,16 @@
     ]
   },
   "src/main.ts": {
-    "file": "assets/main-nU5uoQwZ.js",
+    "file": "assets/main-BTqfzjtQ.js",
     "name": "main",
     "src": "src/main.ts",
     "isEntry": true,
     "imports": [
-      "_WorldModel-BiFPyNcK.js",
+      "_WorldModel-DMMj99wi.js",
       "_buildings-Cn1pCzGo.js"
     ],
     "css": [
-      "assets/main-CXMbvyE3.css"
+      "assets/main-DYJbTHEE.css"
     ],
     "assets": [
       "assets/manrope-300-DNp6adrr.json",
