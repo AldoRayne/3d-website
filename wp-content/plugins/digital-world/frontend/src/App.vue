@@ -495,11 +495,11 @@ onBeforeUnmount(() => {
       <NavigatorChat :ai-enabled="aiEnabled" @command="runCommand" />
     </div>
 
-    <GuestBook v-if="standLayout" :layout="standLayout" :passthrough="islandShown" @close="closeBook">
+    <GuestBook v-if="standLayout" :layout="standLayout" :passthrough="islandShown" :print-left="islandShown" @close="closeBook">
       <template v-if="standLayout.left" #left>
         <Transition name="dw-bookpage-fade">
           <IslandGuide
-            v-if="islandShown && islandMode === 'top'"
+            v-if="islandShown"
             :objects="objects"
             :selected="islandSelected"
             @select="(slug) => scene?.selectIsland(slug)"

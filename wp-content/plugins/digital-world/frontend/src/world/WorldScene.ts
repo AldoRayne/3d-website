@@ -34,10 +34,17 @@ export interface ScreenRect {
   height: number
 }
 
+export interface ScreenPoint {
+  x: number
+  y: number
+}
+
 export interface StandLayout {
   spread: boolean
   left: ScreenRect | null
   right: ScreenRect
+  leftQuad: ScreenPoint[] | null
+  pageAspect: number
 }
 
 export interface WorldSceneOptions {
@@ -602,13 +609,17 @@ export class WorldScene {
   private islandAngledPose() {
     const { book } = this.model.stand
     const normal = book.normal()
-    const corners = book.pageCorners('right')
-    const center = corners.reduce((sum, corner) => sum.add(corner), new THREE.Vector3()).multiplyScalar(0.25).addScaledVector(normal, 0.03)
+    const spread = this.standSpread
+    const corners = book.pageCorners(spread ? 'spread' : 'right')
+    const middle = (points: THREE.Vector3[]) => points.reduce((sum, corner) => sum.add(corner), new THREE.Vector3()).multiplyScalar(1 / points.length)
+    const right = middle(book.pageCorners('right'))
+    const center = (spread ? middle(corners).lerp(right, 0.3) : right).addScaledVector(normal, 0.03)
     const toward = corners[3].clone().sub(corners[0]).normalize()
     const direction = normal.clone().multiplyScalar(Math.cos(ISLAND_TILT)).addScaledVector(toward, Math.sin(ISLAND_TILT)).normalize()
     const size = Math.min(book.pageWidth, book.pageHeight) * 0.95
+    const width = spread ? corners[0].distanceTo(corners[1]) * 0.86 : size
     const tan = Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)
-    const distance = Math.max(size / 2 / tan, size / 2 / (tan * this.camera.aspect)) * 1.15
+    const distance = Math.max(size / 2 / tan, width / 2 / (tan * this.camera.aspect)) * 1.15
     return { position: center.clone().addScaledVector(direction, distance), center }
   }
 
@@ -704,16 +715,19 @@ export class WorldScene {
     this.model.stand.book.setLeaf(0)
   }
 
-  private screenRect(corners: THREE.Vector3[]): ScreenRect {
+  private screenPoints(corners: THREE.Vector3[]): ScreenPoint[] {
     this.camera.updateMatrixWorld()
     const bounds = this.container.getBoundingClientRect()
-    const xs: number[] = []
-    const ys: number[] = []
-    for (const corner of corners) {
+    return corners.map((corner) => {
       const point = corner.clone().project(this.camera)
-      xs.push(bounds.left + ((point.x + 1) / 2) * bounds.width)
-      ys.push(bounds.top + ((1 - point.y) / 2) * bounds.height)
-    }
+      return { x: bounds.left + ((point.x + 1) / 2) * bounds.width, y: bounds.top + ((1 - point.y) / 2) * bounds.height }
+    })
+  }
+
+  private screenRect(corners: THREE.Vector3[]): ScreenRect {
+    const points = this.screenPoints(corners)
+    const xs = points.map((point) => point.x)
+    const ys = points.map((point) => point.y)
     const x = Math.min(...xs)
     const y = Math.min(...ys)
     return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y }
@@ -721,7 +735,10 @@ export class WorldScene {
 
   private emitStandLayout(layout: StandLayout | null) {
     const key = layout
-      ? [layout.left, layout.right].map((rect) => (rect ? [rect.x, rect.y, rect.width, rect.height].map(Math.round).join(',') : '-')).join('|')
+      ? [
+          ...[layout.left, layout.right].map((rect) => (rect ? [rect.x, rect.y, rect.width, rect.height].map(Math.round).join(',') : '-')),
+          (layout.leftQuad ?? []).map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(';'),
+        ].join('|')
       : ''
     if (key === this.standLayoutKey) {
       return
@@ -736,10 +753,13 @@ export class WorldScene {
     }
     const { book } = this.model.stand
     const spread = this.standSpread
+    const left = spread ? book.pageCorners('left') : null
     this.emitStandLayout({
       spread,
-      left: spread ? this.screenRect(book.pageCorners('left')) : null,
+      left: left ? this.screenRect(left) : null,
       right: this.screenRect(book.pageCorners('right')),
+      leftQuad: left ? this.screenPoints(left) : null,
+      pageAspect: book.pageHeight / book.pageWidth,
     })
   }
 
