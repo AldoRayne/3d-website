@@ -198,7 +198,7 @@ export class WorldScene {
     const reach = 26
     Object.assign(this.sun.shadow.camera, { left: -reach, right: reach, top: reach, bottom: -reach, near: 1, far: 140 })
     this.sun.shadow.camera.updateProjectionMatrix()
-    this.placeAt(this.model.spawn, headingOf(this.model.spawn.clone().negate()))
+    this.placeAt(this.model.spawn, this.model.spawnHeading)
     this.applyHighlight()
   }
 

@@ -142,6 +142,7 @@ export class WorldModel {
   colliders: Rect[] = []
   nav: NavGrid | null = null
   spawn = new THREE.Vector3()
+  spawnHeading = 0
   radius = 24
   private buildingsRoot = new THREE.Group()
   private terrain: THREE.Object3D | null = null
@@ -332,6 +333,66 @@ export class WorldModel {
   }
 
   private findSpawn() {
+    const doors = [...this.buildings.values()].map((building) => new THREE.Vector2(building.door.front.x, building.door.front.z))
+    const spot = doors.length ? this.hubNear(this.medianOf(doors), doors) : null
+    const point = spot ?? this.southernSpot()
+    const target = new THREE.Vector2(point.x, point.z)
+    const nearest = doors.reduce<THREE.Vector2 | null>((best, door) => (!best || door.distanceTo(target) < best.distanceTo(target) ? door : best), null)
+    const facing = nearest ? nearest.clone().sub(target) : target.clone().negate()
+    this.spawnHeading = facing.lengthSq() > 1e-6 ? Math.atan2(facing.x, facing.y) : 0
+    return point
+  }
+
+  private medianOf(points: THREE.Vector2[]) {
+    const median = points.reduce((sum, point) => sum.add(point), new THREE.Vector2()).multiplyScalar(1 / points.length)
+    for (let i = 0; i < 50; i++) {
+      const next = new THREE.Vector2()
+      let weight = 0
+      for (const point of points) {
+        const inverse = 1 / Math.max(median.distanceTo(point), 1e-3)
+        next.addScaledVector(point, inverse)
+        weight += inverse
+      }
+      next.multiplyScalar(1 / weight)
+      if (next.distanceTo(median) < 1e-3) {
+        return next
+      }
+      median.copy(next)
+    }
+    return median
+  }
+
+  private hubNear(center: THREE.Vector2, doors: THREE.Vector2[]) {
+    const cx = Math.round(center.x)
+    const cz = Math.round(center.y)
+    const limit = this.radius * 0.85
+    for (let ring = 0; ring <= this.radius * 2; ring++) {
+      const candidates: THREE.Vector2[] = []
+      for (let dx = -ring; dx <= ring; dx++) {
+        for (let dz = -ring; dz <= ring; dz++) {
+          if (Math.max(Math.abs(dx), Math.abs(dz)) !== ring) {
+            continue
+          }
+          const cell = new THREE.Vector2(cx + dx, cz + dz)
+          if (
+            cell.length() <= limit &&
+            this.nav?.isClear(cell, 2) &&
+            !this.zoneAt(new THREE.Vector3(cell.x, 0, cell.y)) &&
+            doors.every((door) => door.distanceTo(cell) >= 3.5)
+          ) {
+            candidates.push(cell)
+          }
+        }
+      }
+      if (candidates.length) {
+        candidates.sort((a, b) => a.distanceTo(center) - b.distanceTo(center) || a.x - b.x || a.y - b.y)
+        return new THREE.Vector3(candidates[0].x, 0, candidates[0].y)
+      }
+    }
+    return null
+  }
+
+  private southernSpot() {
     for (const share of [0.72, 0.62, 0.82, 0.5]) {
       for (let i = 0; i < 24; i++) {
         const angle = Math.PI / 2 + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * (Math.PI / 24)
