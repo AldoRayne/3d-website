@@ -1380,3 +1380,55 @@ kbd {
   border-top: 1px dashed var(--dw-border-strong);
   border-radius: 0 0 10px 10px;
 }
+
+.dw-visit {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  z-index: 40;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 12px;
+  max-width: calc(100vw - 32px);
+  padding: 8px 8px 8px 16px;
+  transform: translateX(-50%);
+  background: #fef3c7;
+  border-radius: 999px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  color: #422006;
+  font-size: 14px;
+}
+
+.dw-visit__label {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #92400e;
+  color: #fff7ed;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.dw-visit__exit {
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: #422006;
+  color: #fef3c7;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.dw-visit__exit:focus-visible {
+  outline: 2px solid #92400e;
+  outline-offset: 2px;
+}
+
+@media (max-width: 900px) {
+  .dw-visit {
+    top: auto;
+    bottom: 96px;
+    border-radius: 16px;
+  }
+}

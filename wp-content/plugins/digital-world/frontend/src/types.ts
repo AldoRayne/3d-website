@@ -51,6 +51,14 @@ export interface BootData {
   ai: boolean
   world?: WorldResponse
   auth?: AuthBoot
+  visit?: VisitBoot | null
+}
+
+export interface VisitBoot {
+  id: number
+  name: string
+  layout: Layout | []
+  returnUrl: string
 }
 
 export type LayoutSide = Exclude<DoorSide, 'auto'>

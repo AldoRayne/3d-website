@@ -77,6 +77,23 @@ function digital_world_clean_layout( array $layout ) {
 	return $clean;
 }
 
+function digital_world_visit_boot() {
+	$user_id = isset( $_GET['visit'] ) ? absint( wp_unslash( $_GET['visit'] ) ) : 0;
+	if ( ! $user_id || ! current_user_can( 'list_users' ) ) {
+		return null;
+	}
+	$user = get_user_by( 'id', $user_id );
+	if ( ! $user ) {
+		return null;
+	}
+	return array(
+		'id'        => $user->ID,
+		'name'      => $user->display_name,
+		'layout'    => (object) digital_world_user_layout( $user->ID ),
+		'returnUrl' => digital_world_island_preview_url( $user->ID ),
+	);
+}
+
 function digital_world_layout_response( $user_id ) {
 	return rest_ensure_response( array( 'layout' => (object) digital_world_user_layout( $user_id ) ) );
 }

@@ -50,7 +50,14 @@ let saveTimer = 0
 let pendingSave: Promise<void> | null = null
 let hintTimer = 0
 
-const worldObjects = () => (currentUser.value ? applyLayout(objects.value, layout.value, radius.value) : objects.value)
+const visit = boot.visit ?? null
+const visitLayout: Layout = visit && !Array.isArray(visit.layout) ? visit.layout : {}
+const worldObjects = () =>
+  visit
+    ? applyLayout(objects.value, visitLayout, radius.value)
+    : currentUser.value
+      ? applyLayout(objects.value, layout.value, radius.value)
+      : objects.value
 const PROBLEMS: Record<Exclude<PlacementProblem, null>, string> = {
   outside: 'Тут край острова',
   overlap: 'Будинки не можуть стояти впритул',
@@ -179,6 +186,10 @@ function onPopState() {
 
 async function openBook() {
   if (!scene.value || bookOpen.value || entering.value || reading.value) {
+    return
+  }
+  if (visit) {
+    showHint('У гостьовому перегляді книга недоступна')
     return
   }
   hint.value = ''
@@ -469,6 +480,12 @@ onBeforeUnmount(() => {
   <div class="dw-app" :class="{ 'is-static': !webgl, 'is-entering': entering || reading || bookOpen }">
     <div v-if="webgl" ref="stage" class="dw-stage" aria-hidden="true" />
 
+    <div v-if="visit" class="dw-visit" role="status">
+      <span class="dw-visit__label">Гостьовий перегляд</span>
+      <span>Острів користувача <strong>{{ visit.name }}</strong></span>
+      <a class="dw-visit__exit" :href="visit.returnUrl">Вийти з перегляду</a>
+    </div>
+
     <header class="dw-topbar">
       <a class="dw-back" :href="homeUrl">
         <span aria-hidden="true">←</span>
@@ -484,6 +501,7 @@ onBeforeUnmount(() => {
       v-if="objects.length"
       :objects="objects"
       :active="zone ?? (atStand ? STAND_SLUG : null)"
+      :visiting="!!visit"
       :static-mode="!webgl"
       @select="(slug) => walkTo(slug)"
       @overview="scene?.overview()"
@@ -494,7 +512,7 @@ onBeforeUnmount(() => {
         <p v-if="hint" class="dw-hint" role="status">{{ hint }}</p>
       </div>
       <DoorCard v-if="zoneObject" :object="zoneObject" :touch="touch" @enter="enter(zoneObject.slug)" />
-      <StandCard v-else-if="showStandCard" :touch="touch" @open="openBook" />
+      <StandCard v-else-if="showStandCard" :touch="touch" :visiting="!!visit" @open="openBook" />
       <NavigatorChat :ai-enabled="aiEnabled" @command="runCommand" />
     </div>
 
