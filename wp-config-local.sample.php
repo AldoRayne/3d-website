@@ -20,3 +20,13 @@ define( 'WP_ENVIRONMENT_TYPE', 'local' );
 define( 'WP_DEBUG', true );
 
 define( 'DIGITAL_WORLD_ANTHROPIC_API_KEY', '' );
+
+// Cloudflare Turnstile. Locally — the official test keys (always pass).
+// Always fail: site 2x00000000000000000000AB, secret 2x0000000000000000000000000000000AA.
+// Empty values disable the check.
+define( 'DIGITAL_WORLD_TURNSTILE_SITE_KEY', '1x00000000000000000000AA' );
+define( 'DIGITAL_WORLD_TURNSTILE_SECRET_KEY', '1x0000000000000000000000000000000AA' );
+
+// Local mail catcher Mailpit (brew install mailpit): inbox at http://localhost:8025.
+define( 'DIGITAL_WORLD_SMTP_HOST', '127.0.0.1' );
+define( 'DIGITAL_WORLD_SMTP_PORT', 1025 );

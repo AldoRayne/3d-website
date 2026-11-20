@@ -47,6 +47,7 @@ function digital_world_boot_data() {
 		'siteName' => get_bloginfo( 'name' ),
 		'ai'       => digital_world_ai_enabled(),
 		'world'    => digital_world_world_payload(),
+		'auth'     => digital_world_auth_boot_data(),
 	);
 }
 

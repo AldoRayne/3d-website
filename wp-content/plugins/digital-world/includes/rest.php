@@ -129,18 +129,9 @@ function digital_world_rest_world() {
 }
 
 function digital_world_rest_navigate_permission( WP_REST_Request $request ) {
-	$nonce = $request->get_header( 'X-WP-Nonce' );
-	if ( ! $nonce || ! wp_verify_nonce( $nonce, 'wp_rest' ) ) {
+	if ( ! digital_world_has_valid_nonce( $request ) ) {
 		return new WP_Error( 'digital_world_bad_nonce', 'Invalid or missing nonce.', array( 'status' => 403 ) );
 	}
-
-	$ip  = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : 'unknown';
-	$key = 'dw_rl_' . md5( $ip );
-	$hit = (int) get_transient( $key );
-	if ( $hit >= DIGITAL_WORLD_RATE_LIMIT ) {
-		return new WP_Error( 'digital_world_rate_limited', 'Too many requests. Try again in a minute.', array( 'status' => 429 ) );
-	}
-	set_transient( $key, $hit + 1, DIGITAL_WORLD_RATE_WINDOW_S );
 
 	return true;
 }
@@ -177,6 +168,10 @@ function digital_world_sanitize_history( $history ) {
 }
 
 function digital_world_rest_navigate( WP_REST_Request $request ) {
+	if ( ! digital_world_take_rate_slot( 'navigate', DIGITAL_WORLD_RATE_LIMIT, DIGITAL_WORLD_RATE_WINDOW_S ) ) {
+		return new WP_Error( 'digital_world_rate_limited', 'Too many requests. Try again in a minute.', array( 'status' => 429 ) );
+	}
+
 	$message = trim( (string) $request->get_param( 'message' ) );
 	$history = digital_world_sanitize_history( $request->get_param( 'history' ) );
 
