@@ -26,6 +26,8 @@ add_action( 'rest_api_init', 'digital_world_register_auth_routes' );
 add_action( 'set_logged_in_cookie', 'digital_world_expose_logged_in_cookie' );
 add_action( 'wp_login', 'digital_world_track_login', 10, 2 );
 add_filter( 'wp_privacy_personal_data_exporters', 'digital_world_register_privacy_exporter' );
+add_action( 'admin_init', 'digital_world_keep_subscribers_out_of_admin' );
+add_filter( 'login_redirect', 'digital_world_subscriber_login_redirect', 10, 3 );
 
 function digital_world_migrate_members() {
 	if ( ! get_role( DIGITAL_WORLD_LEGACY_ROLE ) ) {
@@ -43,6 +45,24 @@ function digital_world_migrate_members() {
 
 function digital_world_books_login( WP_User $user ) {
 	return ! user_can( $user, DIGITAL_WORLD_BOOK_LOGIN_LIMIT );
+}
+
+function digital_world_keep_subscribers_out_of_admin() {
+	global $pagenow;
+	if ( wp_doing_ajax() || 'admin-post.php' === $pagenow || ! is_user_logged_in() ) {
+		return;
+	}
+	if ( digital_world_books_login( wp_get_current_user() ) ) {
+		wp_safe_redirect( digital_world_url() );
+		exit;
+	}
+}
+
+function digital_world_subscriber_login_redirect( $redirect_to, $requested, $user ) {
+	if ( $user instanceof WP_User && digital_world_books_login( $user ) && str_starts_with( $redirect_to, admin_url() ) ) {
+		return digital_world_url();
+	}
+	return $redirect_to;
 }
 
 function digital_world_registration_open() {
