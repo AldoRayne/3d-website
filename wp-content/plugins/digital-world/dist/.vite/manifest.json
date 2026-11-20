@@ -1,6 +1,6 @@
 {
-  "_WorldModel-DMMj99wi.js": {
-    "file": "assets/WorldModel-DMMj99wi.js",
+  "_WorldModel-BvXwdVf8.js": {
+    "file": "assets/WorldModel-BvXwdVf8.js",
     "name": "WorldModel",
     "imports": [
       "_buildings-Cn1pCzGo.js"
@@ -13,6 +13,31 @@
     "file": "assets/buildings-Cn1pCzGo.js",
     "name": "buildings"
   },
+  "_dom-Cyao13TS.js": {
+    "file": "assets/dom-Cyao13TS.js",
+    "name": "dom"
+  },
+  "_editor-DQnJkZiG.css": {
+    "file": "assets/editor-DQnJkZiG.css",
+    "src": "_editor-DQnJkZiG.css"
+  },
+  "_editor-Kti59DXY.js": {
+    "file": "assets/editor-Kti59DXY.js",
+    "name": "editor",
+    "imports": [
+      "_WorldModel-BvXwdVf8.js"
+    ],
+    "css": [
+      "assets/editor-DQnJkZiG.css"
+    ]
+  },
+  "_layout-BTPIy6WZ.js": {
+    "file": "assets/layout-BTPIy6WZ.js",
+    "name": "layout",
+    "imports": [
+      "_WorldModel-BvXwdVf8.js"
+    ]
+  },
   "_preview-CDxcuptg.js": {
     "file": "assets/preview-CDxcuptg.js",
     "name": "preview"
@@ -24,17 +49,16 @@
     "isDynamicEntry": true
   },
   "src/admin.ts": {
-    "file": "assets/admin-LBMoUGoY.js",
+    "file": "assets/admin-CpWU1Db2.js",
     "name": "admin",
     "src": "src/admin.ts",
     "isEntry": true,
     "imports": [
-      "_WorldModel-DMMj99wi.js",
+      "_dom-Cyao13TS.js",
       "_buildings-Cn1pCzGo.js",
-      "_preview-CDxcuptg.js"
-    ],
-    "css": [
-      "assets/admin-DQnJkZiG.css"
+      "_preview-CDxcuptg.js",
+      "_WorldModel-BvXwdVf8.js",
+      "_editor-Kti59DXY.js"
     ]
   },
   "src/assets/fonts/manrope-300.json": {
@@ -62,17 +86,29 @@
       "assets/building-BA3ApuxC.css"
     ]
   },
+  "src/island-preview.ts": {
+    "file": "assets/island-CDC2a_wp.js",
+    "name": "island",
+    "src": "src/island-preview.ts",
+    "isEntry": true,
+    "imports": [
+      "_layout-BTPIy6WZ.js",
+      "_editor-Kti59DXY.js"
+    ]
+  },
   "src/main.ts": {
-    "file": "assets/main-BTqfzjtQ.js",
+    "file": "assets/main-Ia6oAAxv.js",
     "name": "main",
     "src": "src/main.ts",
     "isEntry": true,
     "imports": [
-      "_WorldModel-DMMj99wi.js",
-      "_buildings-Cn1pCzGo.js"
+      "_dom-Cyao13TS.js",
+      "_WorldModel-BvXwdVf8.js",
+      "_buildings-Cn1pCzGo.js",
+      "_layout-BTPIy6WZ.js"
     ],
     "css": [
-      "assets/main-DYJbTHEE.css"
+      "assets/main-CCY9ib1X.css"
     ],
     "assets": [
       "assets/manrope-300-DNp6adrr.json",

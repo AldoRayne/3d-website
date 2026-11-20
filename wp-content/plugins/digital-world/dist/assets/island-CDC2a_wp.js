@@ -1,0 +1,1 @@
+import{t as e}from"./layout-BTPIy6WZ.js";import{t}from"./editor-Kti59DXY.js";var n=window.DigitalWorldIsland,r=document.getElementById(`digital-world-island`);if(n&&r){let i=Array.isArray(n.layout)?{}:n.layout;new t(r,{onSelect:()=>{},onCommit:()=>{},onDragProblem:()=>{}},{readOnly:!0}).setWorld(e(n.objects,i,n.radius),n.radius)}
