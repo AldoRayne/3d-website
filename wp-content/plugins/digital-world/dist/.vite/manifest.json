@@ -1,9 +1,12 @@
 {
-  "_WorldModel-0PNaMhYp.js": {
-    "file": "assets/WorldModel-0PNaMhYp.js",
+  "_WorldModel-8Jv1rMXE.js": {
+    "file": "assets/WorldModel-8Jv1rMXE.js",
     "name": "WorldModel",
     "imports": [
       "_buildings-Cn1pCzGo.js"
+    ],
+    "dynamicImports": [
+      "node_modules/modern-screenshot/dist/index.mjs"
     ]
   },
   "_buildings-Cn1pCzGo.js": {
@@ -21,12 +24,12 @@
     "isDynamicEntry": true
   },
   "src/admin.ts": {
-    "file": "assets/admin-Bq6bHr6p.js",
+    "file": "assets/admin-C-8cI0eY.js",
     "name": "admin",
     "src": "src/admin.ts",
     "isEntry": true,
     "imports": [
-      "_WorldModel-0PNaMhYp.js",
+      "_WorldModel-8Jv1rMXE.js",
       "_buildings-Cn1pCzGo.js",
       "_preview-CDxcuptg.js"
     ],
@@ -60,19 +63,16 @@
     ]
   },
   "src/main.ts": {
-    "file": "assets/main-CH7nB63Z.js",
+    "file": "assets/main-DH7mN1lx.js",
     "name": "main",
     "src": "src/main.ts",
     "isEntry": true,
     "imports": [
-      "_WorldModel-0PNaMhYp.js",
+      "_WorldModel-8Jv1rMXE.js",
       "_buildings-Cn1pCzGo.js"
     ],
-    "dynamicImports": [
-      "node_modules/modern-screenshot/dist/index.mjs"
-    ],
     "css": [
-      "assets/main-ws_YOlOw.css"
+      "assets/main-RJcB5Lgz.css"
     ],
     "assets": [
       "assets/manrope-300-DNp6adrr.json",
