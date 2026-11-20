@@ -22,6 +22,7 @@ require_once DIGITAL_WORLD_DIR . 'includes/world.php';
 require_once DIGITAL_WORLD_DIR . 'includes/navigator.php';
 require_once DIGITAL_WORLD_DIR . 'includes/rest.php';
 require_once DIGITAL_WORLD_DIR . 'includes/auth.php';
+require_once DIGITAL_WORLD_DIR . 'includes/layout.php';
 require_once DIGITAL_WORLD_DIR . 'includes/mail.php';
 require_once DIGITAL_WORLD_DIR . 'includes/frontend.php';
 require_once DIGITAL_WORLD_DIR . 'includes/admin.php';
