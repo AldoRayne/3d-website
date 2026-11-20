@@ -1,10 +1,15 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { boot, fetchWorld } from '@/api'
 import type { CameraTransition, NavigatorCommand, WorldObject } from '@/types'
-import { isEditableTarget, isWebGLAvailable, WorldScene } from '@/world/WorldScene'
+import { isEditableTarget, isWebGLAvailable, WorldScene, type StandLayout } from '@/world/WorldScene'
+import { STAND_SLUG } from '@/world/stand'
+import { currentUser } from '@/auth'
 import ObjectList from '@/components/ObjectList.vue'
 import DoorCard from '@/components/DoorCard.vue'
+import StandCard from '@/components/StandCard.vue'
+import GuestBook from '@/components/GuestBook.vue'
+import GuestBookPage from '@/components/GuestBookPage.vue'
 import NavigatorChat from '@/components/NavigatorChat.vue'
 import ReadingHud from '@/components/ReadingHud.vue'
 
@@ -25,10 +30,14 @@ const zone = ref<string | null>(null)
 const entering = ref<string | null>(null)
 const hint = ref('')
 const reading = ref<{ url: string; title: string; slug: string | null } | null>(null)
+const atStand = ref(false)
+const bookOpen = ref(false)
+const standLayout = ref<StandLayout | null>(null)
 let hintTimer = 0
 
 const bySlug = (slug: string | null) => objects.value.find((object) => object.slug === slug) ?? null
-const zoneObject = computed(() => (entering.value || reading.value ? null : bySlug(zone.value)))
+const zoneObject = computed(() => (entering.value || reading.value || bookOpen.value ? null : bySlug(zone.value)))
+const showStandCard = computed(() => atStand.value && !zoneObject.value && !entering.value && !reading.value && !bookOpen.value)
 const samePath = (a: string, b: string) => new URL(a, window.location.href).pathname === new URL(b, window.location.href).pathname
 const byUrl = (url: string) => objects.value.find((object) => object.url && samePath(object.url, url)) ?? null
 const readHref = (url: string) => `${window.location.pathname}?read=${encodeURIComponent(new URL(url, window.location.href).pathname)}`
@@ -146,7 +155,48 @@ function onPopState() {
   }
 }
 
+async function openBook() {
+  if (!scene.value || bookOpen.value || entering.value || reading.value) {
+    return
+  }
+  hint.value = ''
+  bookOpen.value = true
+  const opened = await scene.value.openStand()
+  if (!opened && !scene.value.standOpen) {
+    bookOpen.value = false
+  }
+}
+
+let signedInTimer = 0
+
+watch(currentUser, (user, previous) => {
+  if (user && !previous && bookOpen.value) {
+    window.clearTimeout(signedInTimer)
+    signedInTimer = window.setTimeout(() => void closeBook(), 1600)
+  }
+})
+
+async function closeBook() {
+  window.clearTimeout(signedInTimer)
+  if (!scene.value || !bookOpen.value) {
+    return
+  }
+  standLayout.value = null
+  await scene.value.closeStand()
+  if (!scene.value.standOpen) {
+    bookOpen.value = false
+  }
+}
+
 function onObjectClick(slug: string) {
+  if (slug === STAND_SLUG) {
+    if (atStand.value) {
+      void openBook()
+    } else {
+      showHint('Підійдіть ближче до книги гостей')
+    }
+    return
+  }
   if (zone.value === slug) {
     void enter(slug)
     return
@@ -187,6 +237,11 @@ function onPageShow(event: PageTransitionEvent) {
 }
 
 function onKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && bookOpen.value) {
+    event.preventDefault()
+    void closeBook()
+    return
+  }
   if (event.key === 'Escape' && reading.value && !isEditableTarget(event.target)) {
     event.preventDefault()
     exitReading()
@@ -198,9 +253,17 @@ function onKeydown(event: KeyboardEvent) {
   if ((event.target as HTMLElement | null)?.closest('button, a, [role="button"]')) {
     return
   }
-  if (entering.value) {
+  if (entering.value || (bookOpen.value && !standLayout.value)) {
     event.preventDefault()
     scene.value?.hurry()
+    return
+  }
+  if (bookOpen.value) {
+    return
+  }
+  if (atStand.value && !zone.value) {
+    event.preventDefault()
+    void openBook()
     return
   }
   if (zone.value) {
@@ -220,7 +283,14 @@ onMounted(async () => {
     homeUrl.value = world.site.home
     aiEnabled.value = world.ai
     if (webgl && stage.value) {
-      scene.value = new WorldScene(stage.value, { reducedMotion, onObjectClick, onZoneChange, onLink })
+      scene.value = new WorldScene(stage.value, {
+        reducedMotion,
+        onObjectClick,
+        onZoneChange,
+        onLink,
+        onStandZone: (active) => (atStand.value = active),
+        onStandLayout: (layout) => (standLayout.value = layout),
+      })
       scene.value.setObjects(world.objects, world.island.radius)
       let lastDoor: string | null = null
       storage((store) => {
@@ -257,7 +327,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="dw-app" :class="{ 'is-static': !webgl, 'is-entering': entering || reading }">
+  <div class="dw-app" :class="{ 'is-static': !webgl, 'is-entering': entering || reading || bookOpen }">
     <div v-if="webgl" ref="stage" class="dw-stage" aria-hidden="true" />
 
     <header class="dw-topbar">
@@ -285,8 +355,18 @@ onBeforeUnmount(() => {
         <p v-if="hint" class="dw-hint" role="status">{{ hint }}</p>
       </div>
       <DoorCard v-if="zoneObject" :object="zoneObject" :touch="touch" @enter="enter(zoneObject.slug)" />
+      <StandCard v-else-if="showStandCard" :touch="touch" @open="openBook" />
       <NavigatorChat :ai-enabled="aiEnabled" @command="runCommand" />
     </div>
+
+    <GuestBook v-if="standLayout" :layout="standLayout" @close="closeBook">
+      <template v-if="standLayout.left" #left>
+        <GuestBookPage side="left" :autofocus="!touch" />
+      </template>
+      <template #right>
+        <GuestBookPage :side="standLayout.left ? 'right' : 'single'" :autofocus="!touch && !standLayout.left" />
+      </template>
+    </GuestBook>
 
     <ReadingHud
       v-if="reading"

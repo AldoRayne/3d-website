@@ -18,12 +18,14 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    public code = '',
+    public fields: Record<string, string> = {},
   ) {
     super(message)
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${boot.restUrl}${path}`, {
     ...init,
     credentials: 'same-origin',
@@ -37,7 +39,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   const data = await response.json().catch(() => null)
   if (!response.ok) {
-    throw new ApiError(data?.message ?? `HTTP ${response.status}`, response.status)
+    throw new ApiError(data?.message ?? `HTTP ${response.status}`, response.status, data?.code ?? '', data?.data?.fields ?? {})
   }
   return data as T
 }

@@ -177,6 +177,9 @@ const painters: Record<string, (ctx: Ctx, rnd: Random, arg: string) => void> = {
       ctx.fillRect(2, y, SIZE - 4, 1)
     }
   },
+  blankPaper(ctx, rnd) {
+    noise(ctx, rnd, ['#f4ecd9', '#f2ead6', '#f6efdf'])
+  },
   pageEdge(ctx) {
     for (let y = 0; y < SIZE; y++) {
       ctx.fillStyle = y % 2 ? '#d8ccb0' : '#f2e9d5'

@@ -50,4 +50,22 @@ export interface BootData {
   siteName: string
   ai: boolean
   world?: WorldResponse
+  auth?: AuthBoot
+}
+
+export interface AuthUser {
+  id: number
+  name: string
+  canAdmin?: boolean
+}
+
+export interface AuthBoot {
+  user: AuthUser | null
+  registrationOpen: boolean
+  turnstileSiteKey: string
+  lostPasswordUrl: string
+  privacyUrl: string
+  adminUrl: string
+  adminLoginUrl: string
+  minPassword: number
 }

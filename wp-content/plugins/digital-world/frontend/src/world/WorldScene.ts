@@ -6,12 +6,14 @@ import type { CameraTransition, WorldObject } from '@/types'
 import { isEditableTarget } from './dom'
 import { pushOut } from './navigation'
 import { foliageUniforms } from './foliage'
-import { Interior, PRINT_OPACITY, SHEET_COUNT, snapshotPage } from './interior'
+import { BOOK_SETTLED, PRINT_OPACITY, snapshotPage } from './book'
+import { Interior } from './interior'
 import { BookSpace } from './reading/BookSpace'
 import { loadFont, warmGlyphs } from './reading/font'
 import { sculptPage, type Sculpture } from './reading/sculpt'
 import { Player, PLAYER_RADIUS } from './Player'
 import { WorldModel, type Building } from './WorldModel'
+import { STAND_READ_DISTANCE, STAND_SLUG } from './stand'
 
 export { isEditableTarget, isWebGLAvailable } from './dom'
 
@@ -23,9 +25,24 @@ interface Walk {
 
 export type EnterResult = 'read' | 'navigate' | false
 
+export interface ScreenRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface StandLayout {
+  spread: boolean
+  left: ScreenRect | null
+  right: ScreenRect
+}
+
 export interface WorldSceneOptions {
   onObjectClick: (slug: string) => void
   onZoneChange: (slug: string | null) => void
+  onStandZone?: (active: boolean) => void
+  onStandLayout?: (layout: StandLayout | null) => void
   onLink?: (href: string) => void
   reducedMotion?: boolean
 }
@@ -35,6 +52,10 @@ const TURN_SPEED = 2.6
 const EYE = new THREE.Vector3(0, 1.6, 0)
 const UP = new THREE.Vector3(0, 1, 0)
 const SEE_TARGET = new THREE.Vector3(0, 1.3, 0)
+const STAND_SPREAD_MIN_ASPECT = 1.05
+const STAND_COVERAGE = 0.86
+const STAND_ARC = 1.4
+const HIDE_PLAYER_WITHIN = 1.8
 const KEYS = {
   forward: ['ArrowUp', 'KeyW'],
   back: ['ArrowDown', 'KeyS'],
@@ -73,6 +94,9 @@ export class WorldScene {
   private sun: THREE.DirectionalLight
   private hovered: string | null = null
   private zone: string | null = null
+  private atStand = false
+  private standState: 'closed' | 'opening' | 'open' | 'closing' = 'closed'
+  private standLayoutKey = ''
   private frame = 0
   private resizeObserver: ResizeObserver
   private disposed = false
@@ -83,7 +107,7 @@ export class WorldScene {
   private walk: Walk | null = null
   private faceAfterWalk: number | null = null
   private marker: THREE.Mesh
-  private mode: 'chase' | 'overview' | 'cinematic' | 'reading' = 'chase'
+  private mode: 'chase' | 'overview' | 'cinematic' | 'reading' | 'book' = 'chase'
   private space: BookSpace | null = null
   private reading = false
   private yawOffset = 0
@@ -402,6 +426,13 @@ export class WorldScene {
       this.camera.lookAt(this.cinematicLook)
       return
     }
+    if (this.mode === 'book') {
+      const pose = this.standPose()
+      this.camera.position.copy(pose.position)
+      this.cinematicLook.copy(pose.center)
+      this.camera.lookAt(pose.center)
+      return
+    }
     if (!this.drag?.moved) {
       const decay = Math.exp(-dt * 3)
       this.yawOffset *= decay
@@ -427,6 +458,12 @@ export class WorldScene {
   }
 
   private updateZone() {
+    const atStand = this.locked ? this.atStand : this.model.standZoneAt(this.player.position)
+    if (atStand !== this.atStand) {
+      this.atStand = atStand
+      this.applyHighlight()
+      this.options.onStandZone?.(atStand)
+    }
     const current = this.locked ? this.zone : this.model.zoneAt(this.player.position)
     if (current !== this.zone) {
       this.zone = current
@@ -445,6 +482,7 @@ export class WorldScene {
   }
 
   private applyHighlight() {
+    this.model.stand.setHighlight(this.atStand || this.hovered === STAND_SLUG)
     for (const [slug, entry] of this.model.buildings) {
       const inZone = slug === this.zone
       this.labelButtons.get(slug)?.classList.toggle('is-active', inZone || slug === this.hovered)
@@ -516,10 +554,182 @@ export class WorldScene {
   }
 
   hurry() {
-    if (this.locked && this.interior) {
+    if (this.locked && (this.interior || this.standState === 'opening' || this.standState === 'closing')) {
       this.speed = 4
       this.timeline?.timeScale(this.speed)
     }
+  }
+
+  get standOpen() {
+    return this.standState !== 'closed'
+  }
+
+  private get standSpread() {
+    return this.camera.aspect >= STAND_SPREAD_MIN_ASPECT
+  }
+
+  private standPose() {
+    const { book } = this.model.stand
+    const corners = book.pageCorners(this.standSpread ? 'spread' : 'right')
+    const center = corners.reduce((sum, corner) => sum.add(corner), new THREE.Vector3()).multiplyScalar(0.25)
+    const width = corners[0].distanceTo(corners[1])
+    const height = corners[1].distanceTo(corners[2])
+    const tan = Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)
+    const distance = Math.max(height / 2 / tan, width / 2 / (tan * this.camera.aspect)) / STAND_COVERAGE
+    return { position: center.clone().addScaledVector(book.normal(), distance), center }
+  }
+
+  private screenRect(corners: THREE.Vector3[]): ScreenRect {
+    this.camera.updateMatrixWorld()
+    const bounds = this.container.getBoundingClientRect()
+    const xs: number[] = []
+    const ys: number[] = []
+    for (const corner of corners) {
+      const point = corner.clone().project(this.camera)
+      xs.push(bounds.left + ((point.x + 1) / 2) * bounds.width)
+      ys.push(bounds.top + ((1 - point.y) / 2) * bounds.height)
+    }
+    const x = Math.min(...xs)
+    const y = Math.min(...ys)
+    return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y }
+  }
+
+  private emitStandLayout(layout: StandLayout | null) {
+    const key = layout
+      ? [layout.left, layout.right].map((rect) => (rect ? [rect.x, rect.y, rect.width, rect.height].map(Math.round).join(',') : '-')).join('|')
+      : ''
+    if (key === this.standLayoutKey) {
+      return
+    }
+    this.standLayoutKey = key
+    this.options.onStandLayout?.(layout)
+  }
+
+  private updateStandLayout() {
+    if (this.standState !== 'open') {
+      return
+    }
+    const { book } = this.model.stand
+    const spread = this.standSpread
+    this.emitStandLayout({
+      spread,
+      left: spread ? this.screenRect(book.pageCorners('left')) : null,
+      right: this.screenRect(book.pageCorners('right')),
+    })
+  }
+
+  openStand(): Promise<boolean> {
+    if (this.locked || this.standState !== 'closed') {
+      return Promise.resolve(false)
+    }
+    this.locked = true
+    this.cancelWalk()
+    this.keys.clear()
+    this.standState = 'opening'
+    this.speed = this.options.reducedMotion ? 50 : 1
+    this.mode = 'cinematic'
+    this.cinematicLook.copy(this.look)
+    return this.play(this.standOpenTimeline()).then((done) => {
+      if (done && this.standState === 'opening') {
+        this.standState = 'open'
+        this.mode = 'book'
+        this.updateStandLayout()
+      }
+      return done
+    })
+  }
+
+  closeStand(): Promise<boolean> {
+    if (this.standState === 'closed' || this.standState === 'closing') {
+      return Promise.resolve(false)
+    }
+    this.stopCinematic()
+    this.standState = 'closing'
+    this.emitStandLayout(null)
+    this.mode = 'cinematic'
+    this.speed = this.options.reducedMotion ? 50 : 1
+    return this.play(this.standCloseTimeline()).then((done) => {
+      if (this.standState === 'closing') {
+        this.standState = 'closed'
+        this.player.reach(0)
+        this.look.copy(this.cinematicLook)
+        this.mode = 'chase'
+        this.locked = false
+      }
+      return done
+    })
+  }
+
+  private standOpenTimeline() {
+    const { stand } = this.model
+    const player = this.player
+    const fromPosition = player.position.clone()
+    const toPosition = stand.position.clone().addScaledVector(stand.facing, STAND_READ_DISTANCE)
+    const fromHeading = player.heading
+    const target = headingOf(stand.facing.clone().negate())
+    const toHeading = fromHeading + Math.atan2(Math.sin(target - fromHeading), Math.cos(target - fromHeading))
+    const fromCamera = this.camera.position.clone()
+    const fromLook = this.cinematicLook.clone()
+    const pose = this.standPose()
+    const state = { walk: 0, fly: 0, reach: 0 }
+    const tl = gsap.timeline()
+    tl.to(
+      state,
+      {
+        walk: 1,
+        duration: 0.6,
+        ease: 'sine.inOut',
+        onUpdate: () => {
+          player.position.lerpVectors(fromPosition, toPosition, state.walk)
+          player.heading = THREE.MathUtils.lerp(fromHeading, toHeading, state.walk)
+        },
+      },
+      0,
+    )
+    tl.to(
+      state,
+      {
+        fly: 1,
+        duration: 1.4,
+        ease: 'power2.inOut',
+        onUpdate: () => {
+          this.camera.position.lerpVectors(fromCamera, pose.position, state.fly)
+          this.camera.position.y += STAND_ARC * Math.sin(Math.PI * state.fly)
+          this.cinematicLook.lerpVectors(fromLook, pose.center, state.fly)
+        },
+      },
+      0,
+    )
+    tl.to(state, { reach: 1, duration: 0.35, onUpdate: () => player.reach(state.reach) }, 0.5)
+    tl.add(stand.book.openTimeline(), 0.7)
+    tl.to(state, { reach: 0, duration: 0.35, onUpdate: () => player.reach(state.reach) }, 1.25)
+    return tl
+  }
+
+  private standCloseTimeline() {
+    const fromCamera = this.camera.position.clone()
+    const fromLook = this.cinematicLook.clone()
+    this.yawOffset = 0
+    this.pitchOffset = 0
+    const { position, target } = this.chasePose()
+    const state = { fly: 0 }
+    const tl = gsap.timeline()
+    tl.add(this.model.stand.book.closeTimeline(), 0)
+    tl.to(
+      state,
+      {
+        fly: 1,
+        duration: 1.3,
+        ease: 'power2.inOut',
+        onUpdate: () => {
+          this.camera.position.lerpVectors(fromCamera, position, state.fly)
+          this.camera.position.y += STAND_ARC * Math.sin(Math.PI * state.fly)
+          this.cinematicLook.lerpVectors(fromLook, target, state.fly)
+        },
+      },
+      0.9,
+    )
+    return tl
   }
 
   enter(slug: string, url: string): Promise<EnterResult> {
@@ -871,9 +1081,9 @@ export class WorldScene {
     const near = this.bookPose(interior, fill * 1.75)
     const final = this.bookPose(interior, fill)
     const from = this.camera.position.clone()
-    const state = { cover: 0, reach: 1, reveal: 0, drift: 0, push: 0, sheets: Array.from({ length: SHEET_COUNT }, () => 0) }
+    const state = { reach: 1, drift: 0, push: 0 }
     const tl = gsap.timeline()
-    tl.to(state, { cover: 1, duration: 0.75, ease: 'power2.inOut', onUpdate: () => book.setCover(state.cover) }, 0)
+    tl.add(book.openTimeline(), 0)
     tl.to(state, { reach: 0, duration: 0.35, onUpdate: () => this.player.reach(state.reach) }, 0.25)
     tl.to(
       state,
@@ -888,12 +1098,6 @@ export class WorldScene {
       },
       0,
     )
-    state.sheets.forEach((_, index) => {
-      const sheet = { t: 0 }
-      tl.to(sheet, { t: 1, duration: 0.85, ease: 'sine.inOut', onUpdate: () => book.setSheet(index, sheet.t) }, 0.5 + index * 0.32)
-    })
-    const lastSheet = 0.5 + (state.sheets.length - 1) * 0.32
-    tl.to(state, { reveal: 1, duration: 0.45, ease: 'power1.inOut', onUpdate: () => book.setReveal(state.reveal) }, lastSheet + 0.9)
     tl.to(
       state,
       {
@@ -906,7 +1110,7 @@ export class WorldScene {
           book.setPrint(PRINT_OPACITY * (1 - state.push))
         },
       },
-      Math.max(2.3, lastSheet + 1.35),
+      Math.max(2.3, BOOK_SETTLED),
     )
     return tl
   }
@@ -981,7 +1185,7 @@ export class WorldScene {
   }
 
   private pickObject() {
-    const hit = this.raycaster.intersectObjects(this.model.hitboxes, false)[0]
+    const hit = this.raycaster.intersectObjects([...this.model.hitboxes, this.model.stand.hitbox], false)[0]
     return (hit?.object.userData.slug as string | undefined) ?? null
   }
 
@@ -1066,6 +1270,9 @@ export class WorldScene {
     this.updateZone()
     this.player.animate(dt, this.moveSpeed, elapsed, !!this.options.reducedMotion)
     this.updateCamera(dt)
+    this.updateStandLayout()
+    this.player.root.visible =
+      this.standState === 'closed' || this.camera.position.distanceTo(this.player.position.clone().add(EYE)) > HIDE_PLAYER_WITHIN
     if (!this.options.reducedMotion) {
       this.model.animateClouds(elapsed)
       if (this.marker.visible) {

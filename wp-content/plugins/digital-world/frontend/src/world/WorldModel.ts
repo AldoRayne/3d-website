@@ -3,6 +3,7 @@ import type { DoorSide, WorldObject } from '@/types'
 import { generateBuilding, rotateCell, type Blueprint } from './buildings'
 import { NavGrid, type Rect } from './navigation'
 import { PLAYER_RADIUS } from './Player'
+import { GuestStand, STAND_READER_DISTANCE, STAND_SPAWN_DISTANCE, STAND_SPAWN_SIDE } from './stand'
 import { texture } from './textures'
 import { VoxelGrid } from './voxels'
 
@@ -14,6 +15,8 @@ export const DOOR_SIDES: Array<Exclude<DoorSide, 'auto'>> = ['south', 'east', 'n
 
 const TREE_CELL = 5
 const BUILDING_GAP = 1
+const PLAZA_RADIUS = 2.3
+const STAND_TREE_GAP = 6
 
 export interface Door {
   pivot: THREE.Group
@@ -139,6 +142,7 @@ export class WorldModel {
   readonly root = new THREE.Group()
   readonly buildings = new Map<string, Building>()
   readonly hitboxes: THREE.Mesh[] = []
+  readonly stand: GuestStand
   colliders: Rect[] = []
   nav: NavGrid | null = null
   spawn = new THREE.Vector3()
@@ -149,7 +153,8 @@ export class WorldModel {
   private clouds = new THREE.Group()
 
   constructor(private options: { shadows: boolean }) {
-    this.root.add(this.buildingsRoot, this.clouds)
+    this.stand = new GuestStand(options)
+    this.root.add(this.buildingsRoot, this.clouds, this.stand.group)
     this.buildClouds()
   }
 
@@ -293,16 +298,22 @@ export class WorldModel {
   rebuildTerrain() {
     const buildingRects = [...this.buildings.values()].map((building) => building.rect)
     this.nav = new NavGrid(this.radius, buildingRects, PLAYER_RADIUS)
-    this.spawn = this.findSpawn()
+    this.placeStand()
+    this.nav = new NavGrid(this.radius, [...buildingRects, this.stand.rect], PLAYER_RADIUS)
     const paths = this.carvePaths()
+    this.addPlaza(paths)
     const grid = new VoxelGrid()
     const trees = this.plantTrees(grid, paths)
-    this.colliders = [...buildingRects, ...trees]
+    this.colliders = [...buildingRects, this.stand.rect, ...trees]
     this.nav = new NavGrid(this.radius, this.colliders, PLAYER_RADIUS)
     this.buildGround(grid, paths)
     this.terrain?.removeFromParent()
     this.terrain = grid.build({ shadows: this.options.shadows })
     this.root.add(this.terrain)
+  }
+
+  standZoneAt(point: THREE.Vector3) {
+    return this.stand.contains(point)
   }
 
   zoneAt(point: THREE.Vector3) {
@@ -332,15 +343,42 @@ export class WorldModel {
     return cells
   }
 
-  private findSpawn() {
+  private placeStand() {
     const doors = [...this.buildings.values()].map((building) => new THREE.Vector2(building.door.front.x, building.door.front.z))
     const spot = doors.length ? this.hubNear(this.medianOf(doors), doors) : null
     const point = spot ?? this.southernSpot()
-    const target = new THREE.Vector2(point.x, point.z)
-    const nearest = doors.reduce<THREE.Vector2 | null>((best, door) => (!best || door.distanceTo(target) < best.distanceTo(target) ? door : best), null)
-    const facing = nearest ? nearest.clone().sub(target) : target.clone().negate()
-    this.spawnHeading = facing.lengthSq() > 1e-6 ? Math.atan2(facing.x, facing.y) : 0
-    return point
+    const center = new THREE.Vector2(point.x, point.z)
+    const pull = doors.reduce((sum, door) => sum.add(door.clone().sub(center).normalize()), new THREE.Vector2())
+    const preferred =
+      pull.lengthSq() > 0.01 ? pull.negate() : center.lengthSq() > 0.25 ? center.clone() : new THREE.Vector2(0, 1)
+    const quarters = [0, 1, 2, 3]
+      .map((quarter) => ({ quarter, facing: quarterVector(quarter) }))
+      .sort((a, b) => b.facing.x * preferred.x + b.facing.z * preferred.y - (a.facing.x * preferred.x + a.facing.z * preferred.y))
+    const spawnFor = (facing: THREE.Vector3) =>
+      point
+        .clone()
+        .addScaledVector(facing, STAND_SPAWN_DISTANCE)
+        .add(new THREE.Vector3(-facing.z, 0, facing.x).multiplyScalar(STAND_SPAWN_SIDE))
+    const free = (spot: THREE.Vector3) =>
+      Boolean(this.nav?.isClear(new THREE.Vector2(spot.x, spot.z), PLAYER_RADIUS + 0.3)) && !this.zoneAt(spot)
+    const chosen =
+      quarters.find(({ facing }) => free(point.clone().addScaledVector(facing, STAND_READER_DISTANCE)) && free(spawnFor(facing))) ??
+      quarters[0]
+    this.stand.place(point.x, point.z, chosen.quarter, chosen.facing)
+    this.spawn = spawnFor(chosen.facing)
+    this.spawnHeading = Math.atan2(-chosen.facing.x, -chosen.facing.z)
+  }
+
+  private addPlaza(paths: Set<string>) {
+    const { x, z } = this.stand.position
+    const r = Math.ceil(PLAZA_RADIUS)
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dz = -r; dz <= r; dz++) {
+        if (Math.hypot(dx, dz) <= PLAZA_RADIUS + hash2(x + dx, z + dz, 7) * 0.6) {
+          paths.add(`${Math.round(x) + dx},${Math.round(z) + dz}`)
+        }
+      }
+    }
   }
 
   private medianOf(points: THREE.Vector2[]) {
@@ -441,7 +479,12 @@ export class WorldModel {
         const x = gx * TREE_CELL + Math.floor(hash2(gx, gz, 2) * (TREE_CELL - 1))
         const z = gz * TREE_CELL + Math.floor(hash2(gx, gz, 3) * (TREE_CELL - 1))
         const point = new THREE.Vector2(x, z)
-        if (point.length() > this.radius - 3 || floors.has(`${x},${z}`) || point.distanceTo(spawn) < 5) {
+        if (
+          point.length() > this.radius - 3 ||
+          floors.has(`${x},${z}`) ||
+          point.distanceTo(spawn) < 5 ||
+          point.distanceTo(new THREE.Vector2(this.stand.position.x, this.stand.position.z)) < STAND_TREE_GAP
+        ) {
           continue
         }
         let nearPath = false
