@@ -42,6 +42,7 @@ export class WorldEditor {
   constructor(
     private container: HTMLElement,
     private callbacks: EditorCallbacks,
+    private options: { readOnly?: boolean } = {},
   ) {
     const { clientWidth: width, clientHeight: height } = container
     this.renderer = new THREE.WebGLRenderer({ antialias: true })
@@ -272,6 +273,10 @@ export class WorldEditor {
       this.pointerDownOnEmpty = { x: event.clientX, y: event.clientY }
       return
     }
+    if (this.options.readOnly) {
+      this.select(slug)
+      return
+    }
     const point = this.groundPoint()
     const placement = this.model.placementOf(slug)
     if (!point || !placement) {
@@ -297,7 +302,7 @@ export class WorldEditor {
     this.setPointer(event)
     if (!this.drag) {
       const hit = this.raycaster.intersectObjects(this.model.hitboxes, false)[0]
-      this.renderer.domElement.style.cursor = hit ? 'grab' : ''
+      this.renderer.domElement.style.cursor = hit ? (this.options.readOnly ? 'pointer' : 'grab') : ''
       return
     }
     const point = this.groundPoint()
