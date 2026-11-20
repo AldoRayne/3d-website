@@ -238,17 +238,7 @@ export class WorldEditor {
   }
 
   rotate(slug: string, step = 1) {
-    const placement = this.model.placementOf(slug)
-    if (!placement) {
-      return null
-    }
-    for (let i = 1; i <= 4; i++) {
-      const candidate = { ...placement, quarter: (placement.quarter + step * i + 8) % 4 }
-      if (!this.check(slug, candidate)) {
-        return candidate
-      }
-    }
-    return null
+    return this.model.rotationFor(slug, step)
   }
 
   nudge(slug: string, dx: number, dz: number) {

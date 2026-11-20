@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { boot, request } from '@/api'
-import type { AuthBoot, AuthUser } from '@/types'
+import type { AuthBoot, AuthUser, Layout } from '@/types'
 
 export const authConfig: AuthBoot = boot.auth ?? {
   user: null,
@@ -42,3 +42,19 @@ async function authRequest(path: string, body: object) {
 export const login = (input: LoginInput) => authRequest('/auth/login', input)
 export const register = (input: RegisterInput) => authRequest('/auth/register', input)
 export const logout = () => authRequest('/auth/logout', {})
+
+interface LayoutResponse {
+  layout: Layout | []
+}
+
+const normalize = (layout: Layout | []) => (Array.isArray(layout) ? {} : layout)
+
+export async function saveLayout(layout: Layout) {
+  const data = await request<LayoutResponse>('/layout', { method: 'PUT', body: JSON.stringify({ layout }) })
+  return normalize(data.layout)
+}
+
+export async function resetLayout() {
+  const data = await request<LayoutResponse>('/layout', { method: 'DELETE' })
+  return normalize(data.layout)
+}

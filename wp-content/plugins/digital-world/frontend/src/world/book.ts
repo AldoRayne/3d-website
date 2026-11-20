@@ -38,6 +38,7 @@ export interface BookOptions {
   aspect: number
   live?: LivePage
   blank?: boolean
+  leaf?: boolean
 }
 
 type Disposable = { dispose(): void }
@@ -146,9 +147,11 @@ export class Book {
   private backTexture: THREE.CanvasTexture | null = null
   private owned: Disposable[] = []
   private page: CSS3DObject | null = null
-  private state = { cover: 0, sheets: SHEET_LIFTS.map(() => 0), reveal: 0 }
+  private state = { cover: 0, sheets: SHEET_LIFTS.map(() => 0), reveal: 0, leaf: 0 }
+  private leaf: { geometry: THREE.PlaneGeometry; lift: number; mesh: THREE.Mesh } | null = null
+  readonly pageAnchor = new THREE.Group()
 
-  constructor({ content, aspect, live, blank }: BookOptions) {
+  constructor({ content, aspect, live, blank, leaf }: BookOptions) {
     this.spread = aspect >= 1
     const contentWidth = PAGE_HEIGHT * aspect
     const w = this.spread ? contentWidth / 2 : contentWidth
@@ -219,6 +222,21 @@ export class Book {
       this.sheets.push({ geometry, lift, meshes, shadows })
     })
     this.sheets.forEach((_, index) => this.setSheet(index, 0))
+
+    if (leaf) {
+      const geometry = this.own(new THREE.PlaneGeometry(paperW, paperD, SEGMENTS, ROWS))
+      const mesh = new THREE.Mesh(
+        geometry,
+        this.own(new THREE.MeshLambertMaterial({ map: texture('blankPaper'), side: THREE.DoubleSide })),
+      )
+      mesh.position.set(0, BLOCK_TOP, 0)
+      mesh.frustumCulled = false
+      mesh.visible = false
+      this.group.add(mesh)
+      this.leaf = { geometry, lift: 0.0025, mesh }
+    }
+    this.pageAnchor.position.set(w / 2, BLOCK_TOP + 0.0012, 0)
+    this.group.add(this.pageAnchor)
 
     this.print = this.own(
       live
@@ -301,6 +319,43 @@ export class Book {
   setSheet(index: number, t: number) {
     this.state.sheets[index] = t
     const { geometry, lift, shadows } = this.sheets[index]
+    const sides = this.bend(geometry, lift, t)
+
+    const moving = t > 0 && t < 1
+    shadows.forEach((shadow, side) => {
+      const { extent, height, count } = sides[side]
+      const strength = moving && count ? THREE.MathUtils.clamp(height / count / 0.1, 0, 1) : 0
+      shadow.visible = strength > 0.01 && extent > 0.01
+      shadow.scale.x = side === 0 ? extent : -extent
+      ;(shadow.material as THREE.MeshBasicMaterial).opacity = SHADOW * strength
+    })
+
+    if (index === this.sheets.length - 1) {
+      const landed = t >= 1
+      this.sheets.slice(0, -1).forEach((sheet) => sheet.meshes.forEach((mesh) => (mesh.visible = !landed)))
+      if (this.leftPrint) {
+        this.leftPrint.visible = landed
+      }
+    }
+  }
+
+  setLeaf(t: number) {
+    if (!this.leaf) {
+      return
+    }
+    this.state.leaf = t
+    this.leaf.mesh.visible = t > 0 && t < 1
+    this.bend(this.leaf.geometry, this.leaf.lift, t)
+  }
+
+  turnTimeline(forward: boolean) {
+    const tl = gsap.timeline()
+    const state = { t: this.state.leaf }
+    tl.to(state, { t: forward ? 1 : 0, duration: SHEET_DURATION * 1.1, ease: 'sine.inOut', onUpdate: () => this.setLeaf(state.t) })
+    return tl
+  }
+
+  private bend(geometry: THREE.PlaneGeometry, lift: number, t: number) {
     const width = this.pageWidth * MARGIN
     const depth = this.pageHeight * MARGIN
     const step = width / SEGMENTS
@@ -334,23 +389,7 @@ export class Book {
     position.needsUpdate = true
     geometry.computeVertexNormals()
     geometry.computeBoundingSphere()
-
-    const moving = t > 0 && t < 1
-    shadows.forEach((shadow, side) => {
-      const { extent, height, count } = sides[side]
-      const strength = moving && count ? THREE.MathUtils.clamp(height / count / 0.1, 0, 1) : 0
-      shadow.visible = strength > 0.01 && extent > 0.01
-      shadow.scale.x = side === 0 ? extent : -extent
-      ;(shadow.material as THREE.MeshBasicMaterial).opacity = SHADOW * strength
-    })
-
-    if (index === this.sheets.length - 1) {
-      const landed = t >= 1
-      this.sheets.slice(0, -1).forEach((sheet) => sheet.meshes.forEach((mesh) => (mesh.visible = !landed)))
-      if (this.leftPrint) {
-        this.leftPrint.visible = landed
-      }
-    }
+    return sides
   }
 
   setReveal(t: number) {

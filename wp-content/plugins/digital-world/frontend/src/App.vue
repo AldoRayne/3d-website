@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { boot, fetchWorld } from '@/api'
-import type { CameraTransition, NavigatorCommand, WorldObject } from '@/types'
+import type { CameraTransition, Layout, NavigatorCommand, WorldObject } from '@/types'
 import { isEditableTarget, isWebGLAvailable, WorldScene, type StandLayout } from '@/world/WorldScene'
 import { STAND_SLUG } from '@/world/stand'
-import { currentUser } from '@/auth'
+import { currentUser, logout, resetLayout, saveLayout } from '@/auth'
+import { applyLayout, layoutDiff } from '@/world/layout'
+import type { Placement, PlacementProblem } from '@/world/WorldModel'
+import IslandToolbar from '@/components/IslandToolbar.vue'
+import IslandGuide from '@/components/IslandGuide.vue'
 import ObjectList from '@/components/ObjectList.vue'
 import DoorCard from '@/components/DoorCard.vue'
 import StandCard from '@/components/StandCard.vue'
@@ -33,8 +37,26 @@ const reading = ref<{ url: string; title: string; slug: string | null } | null>(
 const atStand = ref(false)
 const bookOpen = ref(false)
 const standLayout = ref<StandLayout | null>(null)
+const radius = ref(24)
+const layout = ref<Layout>(currentUser.value?.layout ?? {})
+const islandShown = ref(false)
+const islandOpening = ref(false)
+const islandMode = ref<'top' | 'angled'>('top')
+const islandSelected = ref<string | null>(null)
+const islandProblem = ref('')
+const saveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
+let worldDirty = false
+let saveTimer = 0
+let pendingSave: Promise<void> | null = null
 let hintTimer = 0
 
+const worldObjects = () => (currentUser.value ? applyLayout(objects.value, layout.value, radius.value) : objects.value)
+const PROBLEMS: Record<Exclude<PlacementProblem, null>, string> = {
+  outside: 'Тут край острова',
+  overlap: 'Будинки не можуть стояти впритул',
+  'door-blocked': 'Двері впираються в інший будинок',
+  'blocks-door': 'Так буде закрито чужі двері',
+}
 const bySlug = (slug: string | null) => objects.value.find((object) => object.slug === slug) ?? null
 const zoneObject = computed(() => (entering.value || reading.value || bookOpen.value ? null : bySlug(zone.value)))
 const showStandCard = computed(() => atStand.value && !zoneObject.value && !entering.value && !reading.value && !bookOpen.value)
@@ -164,27 +186,131 @@ async function openBook() {
   const opened = await scene.value.openStand()
   if (!opened && !scene.value.standOpen) {
     bookOpen.value = false
+    return
+  }
+  if (opened && currentUser.value) {
+    await showIsland(false)
+  }
+}
+
+async function showIsland(turn: boolean) {
+  if (!scene.value || !bookOpen.value) {
+    return
+  }
+  islandSelected.value = null
+  islandProblem.value = ''
+  saveStatus.value = 'idle'
+  islandMode.value = 'top'
+  islandOpening.value = true
+  const shown = await scene.value.showIsland(worldObjects(), radius.value, turn)
+  islandOpening.value = false
+  if (shown) {
+    islandShown.value = true
   }
 }
 
 let signedInTimer = 0
 
 watch(currentUser, (user, previous) => {
+  if (user?.id === previous?.id) {
+    return
+  }
+  layout.value = user?.layout ?? {}
+  worldDirty = true
   if (user && !previous && bookOpen.value) {
     window.clearTimeout(signedInTimer)
-    signedInTimer = window.setTimeout(() => void closeBook(), 1600)
+    signedInTimer = window.setTimeout(() => void showIsland(true), 1300)
   }
 })
+
+function onIslandChange(placements: Map<string, Placement>) {
+  layout.value = layoutDiff(objects.value, placements)
+  worldDirty = true
+  saveStatus.value = 'saving'
+  window.clearTimeout(saveTimer)
+  saveTimer = window.setTimeout(() => void flushSave(), 500)
+}
+
+function flushSave() {
+  window.clearTimeout(saveTimer)
+  const snapshot = layout.value
+  pendingSave = saveLayout(snapshot)
+    .then(() => {
+      if (layout.value === snapshot) {
+        saveStatus.value = 'saved'
+      }
+      if (currentUser.value) {
+        currentUser.value = { ...currentUser.value, layout: snapshot }
+      }
+    })
+    .catch(() => {
+      saveStatus.value = 'error'
+    })
+    .finally(() => {
+      pendingSave = null
+    })
+  return pendingSave
+}
+
+async function resetIsland() {
+  window.clearTimeout(saveTimer)
+  saveStatus.value = 'saving'
+  try {
+    layout.value = await resetLayout()
+    if (currentUser.value) {
+      currentUser.value = { ...currentUser.value, layout: layout.value }
+    }
+    scene.value?.updateIsland(worldObjects(), radius.value)
+    islandSelected.value = null
+    worldDirty = true
+    saveStatus.value = 'saved'
+  } catch {
+    saveStatus.value = 'error'
+  }
+}
+
+function setIslandMode(mode: 'top' | 'angled') {
+  islandMode.value = mode
+  scene.value?.setIslandMode(mode)
+}
+
+function rotateIsland() {
+  scene.value?.rotateIsland()
+}
+
+async function signOutFromIsland() {
+  if (saveStatus.value === 'saving') {
+    await flushSave()
+  }
+  islandShown.value = false
+  await scene.value?.hideIsland()
+  try {
+    await logout()
+  } catch {
+    showHint('Не вдалося вийти. Спробуйте ще раз.')
+  }
+}
 
 async function closeBook() {
   window.clearTimeout(signedInTimer)
   if (!scene.value || !bookOpen.value) {
     return
   }
+  if (saveStatus.value === 'saving') {
+    void flushSave()
+  }
   standLayout.value = null
+  islandShown.value = false
+  islandOpening.value = false
+  islandSelected.value = null
+  islandProblem.value = ''
   await scene.value.closeStand()
   if (!scene.value.standOpen) {
     bookOpen.value = false
+    if (worldDirty) {
+      worldDirty = false
+      scene.value.setObjects(worldObjects(), radius.value)
+    }
   }
 }
 
@@ -237,6 +363,11 @@ function onPageShow(event: PageTransitionEvent) {
 }
 
 function onKeydown(event: KeyboardEvent) {
+  if ((event.key === 'r' || event.key === 'R' || event.key === 'к' || event.key === 'К') && islandShown.value && !isEditableTarget(event.target)) {
+    event.preventDefault()
+    rotateIsland()
+    return
+  }
   if (event.key === 'Escape' && bookOpen.value) {
     event.preventDefault()
     void closeBook()
@@ -279,6 +410,7 @@ onMounted(async () => {
   try {
     const world = await fetchWorld()
     objects.value = world.objects
+    radius.value = world.island.radius
     siteName.value = world.site.name
     homeUrl.value = world.site.home
     aiEnabled.value = world.ai
@@ -289,9 +421,13 @@ onMounted(async () => {
         onZoneChange,
         onLink,
         onStandZone: (active) => (atStand.value = active),
-        onStandLayout: (layout) => (standLayout.value = layout),
+        onStandLayout: (next) => (standLayout.value = next),
+        onIslandSelect: (slug) => (islandSelected.value = slug),
+        onIslandProblem: (problem) => (islandProblem.value = problem ? PROBLEMS[problem] : ''),
+        onIslandChange,
       })
-      scene.value.setObjects(world.objects, world.island.radius)
+      scene.value.setObjects(worldObjects(), world.island.radius)
+      worldDirty = false
       let lastDoor: string | null = null
       storage((store) => {
         lastDoor = store.getItem(LAST_DOOR_KEY)
@@ -359,14 +495,34 @@ onBeforeUnmount(() => {
       <NavigatorChat :ai-enabled="aiEnabled" @command="runCommand" />
     </div>
 
-    <GuestBook v-if="standLayout" :layout="standLayout" @close="closeBook">
+    <GuestBook v-if="standLayout" :layout="standLayout" :passthrough="islandShown" @close="closeBook">
       <template v-if="standLayout.left" #left>
-        <GuestBookPage side="left" :autofocus="!touch" />
+        <Transition name="dw-bookpage-fade">
+          <IslandGuide
+            v-if="islandShown && islandMode === 'top'"
+            :objects="objects"
+            :selected="islandSelected"
+            @select="(slug) => scene?.selectIsland(slug)"
+          />
+          <GuestBookPage v-else-if="!islandShown && !islandOpening" side="left" :autofocus="!touch" />
+        </Transition>
       </template>
       <template #right>
-        <GuestBookPage :side="standLayout.left ? 'right' : 'single'" :autofocus="!touch && !standLayout.left" />
+        <GuestBookPage v-if="!islandShown && !islandOpening" :side="standLayout.left ? 'right' : 'single'" :autofocus="!touch && !standLayout.left" />
       </template>
     </GuestBook>
+    <IslandToolbar
+      v-if="islandShown && standLayout"
+      :mode="islandMode"
+      :selected="islandSelected"
+      :status="saveStatus"
+      :problem="islandProblem"
+      :touch="touch"
+      @mode="setIslandMode"
+      @rotate="rotateIsland"
+      @reset="resetIsland"
+      @sign-out="signOutFromIsland"
+    />
 
     <ReadingHud
       v-if="reading"

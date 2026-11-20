@@ -138,6 +138,13 @@ export function suggestedRadius(objects: WorldObject[]) {
   return Math.ceil(Math.max(22, ...objects.map((object) => Math.hypot(object.position.x, object.position.z) + 9)))
 }
 
+export interface WorldModelOptions {
+  shadows: boolean
+  clouds?: boolean
+  underground?: boolean
+  standLeaf?: boolean
+}
+
 export class WorldModel {
   readonly root = new THREE.Group()
   readonly buildings = new Map<string, Building>()
@@ -152,10 +159,26 @@ export class WorldModel {
   private terrain: THREE.Object3D | null = null
   private clouds = new THREE.Group()
 
-  constructor(private options: { shadows: boolean }) {
-    this.stand = new GuestStand(options)
+  constructor(private options: WorldModelOptions) {
+    this.stand = new GuestStand({ shadows: options.shadows, leaf: options.standLeaf ?? false })
     this.root.add(this.buildingsRoot, this.clouds, this.stand.group)
-    this.buildClouds()
+    if (options.clouds !== false) {
+      this.buildClouds()
+    }
+  }
+
+  rotationFor(slug: string, step = 1): Placement | null {
+    const placement = this.placementOf(slug)
+    if (!placement) {
+      return null
+    }
+    for (let i = 1; i <= 4; i++) {
+      const candidate = { ...placement, quarter: (placement.quarter + step * i + 8) % 4 }
+      if (!checkPlacement(candidate, this.othersThan(slug), this.radius)) {
+        return candidate
+      }
+    }
+    return null
   }
 
   setWorld(objects: WorldObject[], radius: number) {
@@ -536,7 +559,7 @@ export class WorldModel {
           continue
         }
         grid.set(x, -1, z, floors.has(k) ? 'planks' : paths.has(k) ? 'path' : 'grass')
-        for (let level = 2; level <= 9; level++) {
+        for (let level = 2; level <= (this.options.underground === false ? 0 : 9); level++) {
           if (distance > radius - (level - 1) * 1.6 - jitter * 1.5) {
             break
           }

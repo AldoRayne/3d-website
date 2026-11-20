@@ -28,8 +28,8 @@ export class GuestStand {
   rect: Rect = { minX: -HALF_WIDTH, maxX: HALF_WIDTH, minZ: -HALF_DEPTH, maxZ: HALF_DEPTH }
   private lectern: Lectern
 
-  constructor(options: { shadows: boolean }) {
-    this.book = new Book({ content: { title: STAND_TITLE, color: STAND_COLOR }, aspect: STAND_ASPECT, blank: true })
+  constructor(options: { shadows: boolean; leaf?: boolean }) {
+    this.book = new Book({ content: { title: STAND_TITLE, color: STAND_COLOR }, aspect: STAND_ASPECT, blank: true, leaf: options.leaf })
     this.lectern = new Lectern(this.book)
     this.lectern.group.traverse((node) => {
       if ((node as THREE.Mesh).isMesh) {

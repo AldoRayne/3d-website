@@ -14,6 +14,8 @@ import { sculptPage, type Sculpture } from './reading/sculpt'
 import { Player, PLAYER_RADIUS } from './Player'
 import { WorldModel, type Building } from './WorldModel'
 import { STAND_READ_DISTANCE, STAND_SLUG } from './stand'
+import { MiniIsland } from './island'
+import type { Placement, PlacementProblem } from './WorldModel'
 
 export { isEditableTarget, isWebGLAvailable } from './dom'
 
@@ -43,6 +45,9 @@ export interface WorldSceneOptions {
   onZoneChange: (slug: string | null) => void
   onStandZone?: (active: boolean) => void
   onStandLayout?: (layout: StandLayout | null) => void
+  onIslandSelect?: (slug: string | null) => void
+  onIslandProblem?: (problem: PlacementProblem) => void
+  onIslandChange?: (placements: Map<string, Placement>) => void
   onLink?: (href: string) => void
   reducedMotion?: boolean
 }
@@ -55,6 +60,8 @@ const SEE_TARGET = new THREE.Vector3(0, 1.3, 0)
 const STAND_SPREAD_MIN_ASPECT = 1.05
 const STAND_COVERAGE = 0.86
 const STAND_ARC = 1.4
+const ISLAND_TILT = THREE.MathUtils.degToRad(56)
+const ISLAND_GROW = 1.4
 const HIDE_PLAYER_WITHIN = 1.8
 const KEYS = {
   forward: ['ArrowUp', 'KeyW'],
@@ -97,6 +104,11 @@ export class WorldScene {
   private atStand = false
   private standState: 'closed' | 'opening' | 'open' | 'closing' = 'closed'
   private standLayoutKey = ''
+  private island: MiniIsland | null = null
+  private islandReady = false
+  private islandTilt = 0
+  private islandTween: gsap.core.Tween | null = null
+  private islandPress: { id: number; x: number; y: number; dragging: boolean } | null = null
   private frame = 0
   private resizeObserver: ResizeObserver
   private disposed = false
@@ -174,7 +186,7 @@ export class WorldScene {
     this.marker.position.y = 0.03
     this.marker.visible = false
 
-    this.model = new WorldModel({ shadows: this.shadows })
+    this.model = new WorldModel({ shadows: this.shadows, standLeaf: true })
     this.scene.add(this.player.root, this.marker, this.model.root)
 
     const canvas = this.renderer.domElement
@@ -576,7 +588,120 @@ export class WorldScene {
     const height = corners[1].distanceTo(corners[2])
     const tan = Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)
     const distance = Math.max(height / 2 / tan, width / 2 / (tan * this.camera.aspect)) / STAND_COVERAGE
-    return { position: center.clone().addScaledVector(book.normal(), distance), center }
+    const flat = { position: center.clone().addScaledVector(book.normal(), distance), center }
+    if (!this.island || this.islandTilt <= 0) {
+      return flat
+    }
+    const angled = this.islandAngledPose()
+    return {
+      position: flat.position.lerp(angled.position, this.islandTilt),
+      center: flat.center.lerp(angled.center, this.islandTilt),
+    }
+  }
+
+  private islandAngledPose() {
+    const { book } = this.model.stand
+    const normal = book.normal()
+    const corners = book.pageCorners('right')
+    const center = corners.reduce((sum, corner) => sum.add(corner), new THREE.Vector3()).multiplyScalar(0.25).addScaledVector(normal, 0.03)
+    const toward = corners[3].clone().sub(corners[0]).normalize()
+    const direction = normal.clone().multiplyScalar(Math.cos(ISLAND_TILT)).addScaledVector(toward, Math.sin(ISLAND_TILT)).normalize()
+    const size = Math.min(book.pageWidth, book.pageHeight) * 0.95
+    const tan = Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)
+    const distance = Math.max(size / 2 / tan, size / 2 / (tan * this.camera.aspect)) * 1.15
+    return { position: center.clone().addScaledVector(direction, distance), center }
+  }
+
+  get islandShown() {
+    return this.islandReady
+  }
+
+  showIsland(objects: WorldObject[], radius: number, turn: boolean): Promise<boolean> {
+    if (this.standState !== 'open') {
+      return Promise.resolve(false)
+    }
+    const { book } = this.model.stand
+    this.island ??= new MiniIsland(book.pageAnchor, book.pageWidth, book.pageHeight)
+    this.island.setWorld(objects, radius)
+    this.island.setGrowth(0)
+    this.islandReady = false
+    const island = this.island
+    const state = { grow: 0 }
+    const tl = gsap.timeline()
+    if (turn) {
+      tl.add(book.turnTimeline(true), 0)
+    }
+    tl.to(state, { grow: 1, duration: ISLAND_GROW, ease: 'none', onUpdate: () => island.setGrowth(state.grow) }, turn ? 0.75 : 0)
+    this.speed = this.options.reducedMotion ? 50 : 1
+    return this.play(tl).then((done) => {
+      if (done && this.island === island) {
+        island.setGrowth(1)
+        this.islandReady = true
+      }
+      return done
+    })
+  }
+
+  updateIsland(objects: WorldObject[], radius: number) {
+    if (this.island) {
+      this.island.setWorld(objects, radius)
+    }
+  }
+
+  setIslandMode(mode: 'top' | 'angled') {
+    this.islandTween?.kill()
+    const target = mode === 'angled' ? 1 : 0
+    if (this.options.reducedMotion) {
+      this.islandTilt = target
+      return
+    }
+    this.islandTween = gsap.to(this, { islandTilt: target, duration: 1.1, ease: 'power2.inOut' })
+  }
+
+  rotateIsland(step = 1) {
+    if (!this.islandReady || !this.island?.rotateSelected(step)) {
+      return false
+    }
+    this.options.onIslandChange?.(this.island.placements)
+    return true
+  }
+
+  selectIsland(slug: string | null) {
+    this.island?.select(slug)
+    this.options.onIslandSelect?.(this.island?.selected ?? null)
+  }
+
+  hideIsland(): Promise<boolean> {
+    const island = this.island
+    if (!island || this.standState !== 'open') {
+      return Promise.resolve(false)
+    }
+    this.islandReady = false
+    island.select(null)
+    this.islandTween?.kill()
+    const state = { grow: 1, tilt: this.islandTilt }
+    const tl = gsap.timeline()
+    tl.to(state, { tilt: 0, duration: 0.6, ease: 'power2.inOut', onUpdate: () => (this.islandTilt = state.tilt) }, 0)
+    tl.to(state, { grow: 0, duration: 0.45, ease: 'power1.in', onUpdate: () => island.setGrowth(state.grow) }, 0)
+    tl.add(this.model.stand.book.turnTimeline(false), 0.4)
+    this.speed = this.options.reducedMotion ? 50 : 1
+    return this.play(tl).then((done) => {
+      if (this.island === island) {
+        this.disposeIsland()
+      }
+      return done
+    })
+  }
+
+  private disposeIsland() {
+    this.islandTween?.kill()
+    this.islandTween = null
+    this.islandTilt = 0
+    this.islandReady = false
+    this.islandPress = null
+    this.island?.dispose()
+    this.island = null
+    this.model.stand.book.setLeaf(0)
   }
 
   private screenRect(corners: THREE.Vector3[]): ScreenRect {
@@ -651,6 +776,7 @@ export class WorldScene {
     return this.play(this.standCloseTimeline()).then((done) => {
       if (this.standState === 'closing') {
         this.standState = 'closed'
+        this.disposeIsland()
         this.player.reach(0)
         this.look.copy(this.cinematicLook)
         this.mode = 'chase'
@@ -712,9 +838,18 @@ export class WorldScene {
     this.yawOffset = 0
     this.pitchOffset = 0
     const { position, target } = this.chasePose()
-    const state = { fly: 0 }
+    const state = { fly: 0, grow: 1 }
     const tl = gsap.timeline()
-    tl.add(this.model.stand.book.closeTimeline(), 0)
+    const island = this.island
+    let start = 0
+    if (island) {
+      this.islandReady = false
+      island.select(null)
+      tl.to(state, { grow: 0, duration: 0.45, ease: 'power1.in', onUpdate: () => island.setGrowth(state.grow) }, 0)
+      tl.add(this.model.stand.book.turnTimeline(false), 0.4)
+      start = 1.25
+    }
+    tl.add(this.model.stand.book.closeTimeline(), start)
     tl.to(
       state,
       {
@@ -727,7 +862,7 @@ export class WorldScene {
           this.cinematicLook.lerpVectors(fromLook, target, state.fly)
         },
       },
-      0.9,
+      start + 0.9,
     )
     return tl
   }
@@ -1115,7 +1250,61 @@ export class WorldScene {
     return tl
   }
 
+  private onIslandDown(event: PointerEvent) {
+    const island = this.island as MiniIsland
+    this.setPointer(event)
+    const slug = island.pick(this.raycaster)
+    const point = island.groundPoint(this.raycaster)
+    this.islandPress = { id: event.pointerId, x: event.clientX, y: event.clientY, dragging: false }
+    if (slug && point && island.beginDrag(slug, point)) {
+      this.islandPress.dragging = true
+      this.renderer.domElement.setPointerCapture(event.pointerId)
+      this.renderer.domElement.style.cursor = 'grabbing'
+      this.options.onIslandSelect?.(slug)
+    }
+  }
+
+  private onIslandMove(event: PointerEvent) {
+    const island = this.island as MiniIsland
+    this.setPointer(event)
+    if (this.islandPress?.dragging && this.islandPress.id === event.pointerId) {
+      const point = island.groundPoint(this.raycaster)
+      if (point) {
+        this.options.onIslandProblem?.(island.moveDrag(point))
+      }
+      return
+    }
+    if (event.pointerType === 'mouse') {
+      this.renderer.domElement.style.cursor = island.pick(this.raycaster) ? 'grab' : ''
+    }
+  }
+
+  private onIslandUp(event: PointerEvent) {
+    const island = this.island as MiniIsland
+    const press = this.islandPress
+    if (!press || press.id !== event.pointerId) {
+      return
+    }
+    this.islandPress = null
+    this.renderer.domElement.style.cursor = ''
+    if (press.dragging) {
+      const committed = island.endDrag()
+      this.options.onIslandProblem?.(null)
+      if (committed) {
+        this.options.onIslandChange?.(island.placements)
+      }
+      return
+    }
+    if (Math.hypot(event.clientX - press.x, event.clientY - press.y) < 6) {
+      this.selectIsland(null)
+    }
+  }
+
   private onPointerDown = (event: PointerEvent) => {
+    if (this.islandReady && this.island) {
+      this.onIslandDown(event)
+      return
+    }
     if (this.locked) {
       this.hurry()
     }
@@ -1125,6 +1314,10 @@ export class WorldScene {
   }
 
   private onPointerMove = (event: PointerEvent) => {
+    if (this.islandReady && this.island) {
+      this.onIslandMove(event)
+      return
+    }
     if (this.drag && this.drag.id === event.pointerId) {
       const dx = event.clientX - this.drag.x
       const dy = event.clientY - this.drag.y
@@ -1149,6 +1342,10 @@ export class WorldScene {
   }
 
   private onPointerUp = (event: PointerEvent) => {
+    if (this.islandReady && this.island) {
+      this.onIslandUp(event)
+      return
+    }
     const drag = this.drag
     if (!drag || drag.id !== event.pointerId) {
       return
@@ -1284,7 +1481,7 @@ export class WorldScene {
     if (this.activeScene === this.scene) {
       foliageUniforms.uSeeFrom.value.copy(this.camera.position)
       foliageUniforms.uSeeTo.value.copy(this.player.position).add(SEE_TARGET)
-      foliageUniforms.uSeeStrength.value = 1
+      foliageUniforms.uSeeStrength.value = this.standState === 'closed' ? 1 : 0
       foliageUniforms.uSeeCell.value = this.renderer.getPixelRatio()
     }
     this.renderer.render(this.activeScene, this.camera)

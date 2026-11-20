@@ -53,10 +53,14 @@ export interface BootData {
   auth?: AuthBoot
 }
 
+export type LayoutSide = Exclude<DoorSide, 'auto'>
+export type Layout = Record<string, { x: number; z: number; door: LayoutSide }>
+
 export interface AuthUser {
   id: number
   name: string
   canAdmin?: boolean
+  layout?: Layout
 }
 
 export interface AuthBoot {
