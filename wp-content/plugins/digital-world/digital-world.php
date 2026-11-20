@@ -25,6 +25,7 @@ require_once DIGITAL_WORLD_DIR . 'includes/auth.php';
 require_once DIGITAL_WORLD_DIR . 'includes/mail.php';
 require_once DIGITAL_WORLD_DIR . 'includes/frontend.php';
 require_once DIGITAL_WORLD_DIR . 'includes/admin.php';
+require_once DIGITAL_WORLD_DIR . 'includes/members.php';
 require_once DIGITAL_WORLD_DIR . 'includes/seed.php';
 
 register_activation_hook( __FILE__, 'digital_world_install' );
