@@ -74,7 +74,7 @@ function digital_world_render_world() {
 	<title><?php echo esc_html( $title ); ?></title>
 	<link rel="canonical" href="<?php echo esc_url( home_url( '/' ) ); ?>">
 	<?php if ( $entry ) : ?>
-		<?php foreach ( (array) ( $entry['css'] ?? array() ) as $css ) : ?>
+		<?php foreach ( digital_world_manifest_css( DIGITAL_WORLD_ENTRY ) as $css ) : ?>
 	<link rel="stylesheet" href="<?php echo esc_url( DIGITAL_WORLD_URL . 'dist/' . $css ); ?>">
 		<?php endforeach; ?>
 	<?php endif; ?>

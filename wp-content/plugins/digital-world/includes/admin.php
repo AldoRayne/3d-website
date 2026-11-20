@@ -30,12 +30,28 @@ function digital_world_is_editor_screen( $hook ) {
 	return str_ends_with( (string) $hook, '_page_' . DIGITAL_WORLD_EDITOR_SLUG );
 }
 
+function digital_world_manifest_css( $name, array &$seen = array() ) {
+	if ( isset( $seen[ $name ] ) ) {
+		return array();
+	}
+	$seen[ $name ] = true;
+	$chunk         = digital_world_manifest()[ $name ] ?? null;
+	if ( ! $chunk ) {
+		return array();
+	}
+	$css = (array) ( $chunk['css'] ?? array() );
+	foreach ( (array) ( $chunk['imports'] ?? array() ) as $import ) {
+		$css = array_merge( $css, digital_world_manifest_css( $import, $seen ) );
+	}
+	return array_values( array_unique( $css ) );
+}
+
 function digital_world_enqueue_entry( $handle, $entry_name ) {
 	$entry = digital_world_manifest()[ $entry_name ] ?? null;
 	if ( ! $entry ) {
 		return;
 	}
-	foreach ( (array) ( $entry['css'] ?? array() ) as $index => $css ) {
+	foreach ( digital_world_manifest_css( $entry_name ) as $index => $css ) {
 		wp_enqueue_style( $handle . '-' . $index, DIGITAL_WORLD_URL . 'dist/' . $css, array(), null );
 	}
 	wp_enqueue_script_module( $handle, DIGITAL_WORLD_URL . 'dist/' . $entry['file'], array(), null );
