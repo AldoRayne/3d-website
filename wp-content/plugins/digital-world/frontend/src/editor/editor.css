@@ -293,3 +293,69 @@
     height: 60vh;
   }
 }
+
+.dwe-compass {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
+  width: 72px;
+  height: 72px;
+  padding: 4px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(20, 24, 31, 0.72);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+}
+
+.dwe-compass:hover {
+  background: rgba(20, 24, 31, 0.86);
+}
+
+.dwe-compass:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.dwe-compass__rose {
+  display: block;
+  width: 64px;
+  height: 64px;
+  will-change: transform;
+}
+
+.dwe-compass__rose svg {
+  display: block;
+  overflow: visible;
+}
+
+.dwe-compass__dial {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.35);
+  stroke-width: 1.5;
+}
+
+.dwe-compass__north {
+  fill: #e5484d;
+}
+
+.dwe-compass__south {
+  fill: #f1f1f1;
+}
+
+.dwe-compass__pin {
+  fill: #14181f;
+  stroke: #fff;
+  stroke-width: 1;
+}
+
+.dwe-compass__letter {
+  fill: rgba(255, 255, 255, 0.85);
+  font: 700 7px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  text-anchor: middle;
+}
+
+.dwe-compass__letter.is-north {
+  fill: #ff8a8d;
+}

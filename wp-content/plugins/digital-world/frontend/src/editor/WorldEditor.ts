@@ -13,12 +13,18 @@ export interface EditorCallbacks {
 const VALID = new THREE.Color('#2271b1')
 const INVALID = new THREE.Color('#d63638')
 
+const NORTH = new THREE.Vector3(0, 0, -1)
+
 export class WorldEditor {
   private renderer: THREE.WebGLRenderer
   private labels: CSS2DRenderer
   private scene = new THREE.Scene()
   private camera: THREE.PerspectiveCamera
   private controls: OrbitControls
+  private compass: HTMLButtonElement
+  private compassRose: HTMLElement
+  private compassAngle = NaN
+  private turn: { from: number; to: number; started: number } | null = null
   private model = new WorldModel({ shadows: false })
   private raycaster = new THREE.Raycaster()
   private pointer = new THREE.Vector2()
@@ -47,6 +53,27 @@ export class WorldEditor {
     this.labels.setSize(width, height)
     this.labels.domElement.className = 'dwe-labels'
     container.appendChild(this.labels.domElement)
+
+    this.compass = document.createElement('button')
+    this.compass.type = 'button'
+    this.compass.className = 'dwe-compass'
+    this.compass.title = 'Повернути панораму північчю догори'
+    this.compass.setAttribute('aria-label', 'Компас. Натисніть, щоб повернути панораму північчю догори')
+    this.compass.innerHTML = `<span class="dwe-compass__rose" aria-hidden="true">
+      <svg viewBox="0 0 64 64" width="64" height="64">
+        <circle cx="32" cy="32" r="30" class="dwe-compass__dial" />
+        <path d="M32 9 L38 32 L26 32 Z" class="dwe-compass__north" />
+        <path d="M32 55 L26 32 L38 32 Z" class="dwe-compass__south" />
+        <circle cx="32" cy="32" r="3" class="dwe-compass__pin" />
+        <text x="32" y="7.5" class="dwe-compass__letter is-north">Пн</text>
+        <text x="58.5" y="35" class="dwe-compass__letter">Сх</text>
+        <text x="32" y="62" class="dwe-compass__letter">Пд</text>
+        <text x="5.5" y="35" class="dwe-compass__letter">Зх</text>
+      </svg>
+    </span>`
+    this.compassRose = this.compass.firstElementChild as HTMLElement
+    this.compass.addEventListener('click', () => this.faceNorth())
+    container.appendChild(this.compass)
 
     this.camera = new THREE.PerspectiveCamera(45, width / height, 0.5, 600)
     this.controls = new OrbitControls(this.camera, this.renderer.domElement)
@@ -348,12 +375,51 @@ export class WorldEditor {
     this.callbacks.onDragProblem(null)
   }
 
+  private faceNorth() {
+    const offset = this.camera.position.clone().sub(this.controls.target)
+    const from = Math.atan2(offset.x, offset.z)
+    if (Math.abs(from) < 1e-3) {
+      return
+    }
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    this.turn = { from, to: 0, started: performance.now() - (reduced ? 1000 : 0) }
+  }
+
+  private stepTurn() {
+    if (!this.turn) {
+      return
+    }
+    const t = Math.min(1, (performance.now() - this.turn.started) / 500)
+    const eased = t * t * (3 - 2 * t)
+    const offset = this.camera.position.clone().sub(this.controls.target)
+    const spherical = new THREE.Spherical().setFromVector3(offset)
+    spherical.theta = this.turn.from + (this.turn.to - this.turn.from) * eased
+    this.camera.position.copy(this.controls.target).add(new THREE.Vector3().setFromSpherical(spherical))
+    if (t >= 1) {
+      this.turn = null
+    }
+  }
+
+  private updateCompass() {
+    const target = this.controls.target
+    const a = target.clone().project(this.camera)
+    const b = target.clone().add(NORTH).project(this.camera)
+    const { clientWidth: width, clientHeight: height } = this.container
+    const angle = Math.atan2(((b.x - a.x) * width) / 2, ((b.y - a.y) * height) / 2)
+    if (Math.abs(angle - this.compassAngle) > 0.002 || Number.isNaN(this.compassAngle)) {
+      this.compassAngle = angle
+      this.compassRose.style.transform = `rotate(${angle}rad)`
+    }
+  }
+
   private loop = () => {
     if (this.disposed) {
       return
     }
     this.frame = requestAnimationFrame(this.loop)
+    this.stepTurn()
     this.controls.update()
+    this.updateCompass()
     this.model.animateClouds(performance.now() / 1000)
     this.renderer.render(this.scene, this.camera)
     this.labels.render(this.scene, this.camera)
@@ -378,5 +444,6 @@ export class WorldEditor {
     this.renderer.dispose()
     this.renderer.domElement.remove()
     this.labels.domElement.remove()
+    this.compass.remove()
   }
 }
