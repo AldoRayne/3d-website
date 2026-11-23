@@ -41,6 +41,7 @@ const radius = ref(24)
 const layout = ref<Layout>(currentUser.value?.layout ?? {})
 const islandShown = ref(false)
 const islandOpening = ref(false)
+const islandClosing = ref(false)
 const islandMode = ref<'top' | 'angled'>('top')
 const islandSelected = ref<string | null>(null)
 const islandProblem = ref('')
@@ -293,12 +294,15 @@ async function signOutFromIsland() {
   if (saveStatus.value === 'saving') {
     await flushSave()
   }
+  islandClosing.value = true
   islandShown.value = false
   await scene.value?.hideIsland()
   try {
     await logout()
   } catch {
     showHint('Не вдалося вийти. Спробуйте ще раз.')
+  } finally {
+    islandClosing.value = false
   }
 }
 
@@ -525,11 +529,17 @@ onBeforeUnmount(() => {
             :selected="islandSelected"
             @select="(slug) => scene?.selectIsland(slug)"
           />
-          <GuestBookPage v-else-if="!islandShown && !islandOpening" side="left" :autofocus="!touch" />
+          <GuestBookPage v-else-if="!islandOpening && !islandClosing" side="left" :autofocus="!touch" />
         </Transition>
       </template>
       <template #right>
-        <GuestBookPage v-if="!islandShown && !islandOpening" :side="standLayout.left ? 'right' : 'single'" :autofocus="!touch && !standLayout.left" />
+        <Transition name="dw-bookpage-fade">
+          <GuestBookPage
+            v-if="!islandShown && !islandOpening && !islandClosing"
+            :side="standLayout.left ? 'right' : 'single'"
+            :autofocus="!touch && !standLayout.left"
+          />
+        </Transition>
       </template>
     </GuestBook>
     <IslandToolbar
