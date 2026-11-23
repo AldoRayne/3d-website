@@ -68,7 +68,7 @@ Commit the changed `composer.json` and `composer.lock` together.
 - The address becomes `/digital-world/?read=/page-path/`, so Back and Forward move between pages and the world, and such a link opens the page in 3D directly. Regular page URLs always show the normal WordPress page.
 - The 3D fonts are generated from the theme's Manrope variable font (SIL Open Font License) in weights 300, 400 and 700 with Latin and Cyrillic: `python3 scripts/build-fonts.py <path to Manrope-VariableFont_wght.woff2>` in `frontend` (needs fontTools and brotli). They load only when a page is opened in 3D.
 - After the browser's Back button, or when arriving via `?focus=<slug>`, the character stands at that building's door.
-- AI Navigator: `claude-opus-5-5` with structured output `{reply, action, target, transition}`. The allowed actions are `navigate`, `open`, `overview` and `none`. `target` is restricted to slugs from the catalog, and the server checks it again before responding.
+- AI Navigator: a language model returns structured output `{reply, action, target, transition}`. The allowed actions are `navigate`, `open`, `overview` and `none`. `target` is restricted to slugs from the catalog, and the server checks it again before responding. Setup is described in [AI Navigator](#ai-navigator) below.
 
 ### Performance
 
@@ -78,14 +78,47 @@ Commit the changed `composer.json` and `composer.lock` together.
 - The world page embeds the world data in its HTML, so the first frame does not wait for `GET /world`.
 - `.htaccess` gzips HTML, CSS, JS and JSON (and maps `.json` to `application/json`, which XAMPP does not) and gives the hashed files in `dist/assets/` a one-year immutable cache.
 
-### Enabling Claude
+### AI Navigator
 
-Set the key in `wp-config-local.php`:
+The Navigator tries the providers whose settings are filled in, in this order, and uses the first one that answers:
 
-```php
-define( 'DIGITAL_WORLD_ANTHROPIC_API_KEY', 'sk-ant-...' );
+| Provider | Setting in `wp-config-local.php` | Default model |
+|---|---|---|
+| Claude | `DIGITAL_WORLD_ANTHROPIC_API_KEY` | `claude-opus-5-5` |
+| Ollama (local) | `DIGITAL_WORLD_OLLAMA_MODEL` (no key) | none, the model name enables it |
+| OpenAI | `DIGITAL_WORLD_OPENAI_API_KEY`, optional `DIGITAL_WORLD_OPENAI_MODEL` | `gpt-5-mini` |
+| Gemini | `DIGITAL_WORLD_GEMINI_API_KEY`, optional `DIGITAL_WORLD_GEMINI_MODEL` | `gemini-3.5-flash-lite` |
+
+An empty value skips the provider. If every provider is skipped or fails (no credits, rate limit, timeout, invalid answer), the Navigator falls back to a local keyword parser. It uses titles, slugs and the "Keywords" field, and works in Ukrainian and English. The chat header names the first configured provider, or shows `Offline`; it does not tell whether that provider actually answered, so check the PHP error log, where every failure is logged as `[digital-world] Navigator <provider> ...`.
+
+All providers share one system prompt (`digital_world_system_prompt()` in `includes/navigator.php`) and one output schema. The prompt is built on every request from the catalog, so edits to an object's "Description" and "Keywords" fields apply immediately. Rules worth knowing:
+
+- The character moves only when the visitor asks to go somewhere, to open or show a section, or where something is. Questions, greetings and small talk get an answer with `none`, and the model may offer to lead the way; the keyword parser follows the same rule.
+- The server detects the language of the visitor's latest message (Ukrainian, Russian or English) and names it at the end of the prompt, so the reply stays in that language even when the catalog is in another one. Markdown and internal slugs such as `@stand` are stripped from replies.
+
+Getting keys:
+
+- **Claude**: Claude Console → API keys. A claude.ai subscription does not include API access, and in an organization only some roles can create keys.
+- **OpenAI**: platform.openai.com → API keys. Needs prepaid credits; a ChatGPT subscription does not include API access.
+- **Gemini**: https://aistudio.google.com/apikey. The free tier works without a billing account but has per-project rate limits and may use requests to improve Google's models. Older model names can return 404 for new keys; set `DIGITAL_WORLD_GEMINI_MODEL` to a current one.
+
+Filters: `digital_world_ai_model` (Claude model), `digital_world_anthropic_api_key`, and for the other providers `digital_world_{ollama,openai,gemini}_api_key`, `digital_world_{provider}_model` and `digital_world_{provider}_request` (the request body).
+
+#### Local model with Ollama
+
+Ollama runs a model on this machine: no key, no request limits, nothing leaves the computer. It is meant for local development, not for production. On an Apple M1 with 16 GB the tested model answers in about 6 seconds, the first request after 5 idle minutes takes about 25 seconds while the model loads, and the site only gets answers while Ollama is running.
+
+```bash
+brew install ollama
+brew services run ollama          # start in the background until reboot
+ollama pull ministral-3:8b-instruct-2512-q4_K_M
 ```
 
-Without a key, or if the API returns an error or a refusal, the Navigator falls back to a local keyword parser. It uses titles, slugs and the "Keywords" field, and works in Ukrainian and English. The chat header shows `Claude` or `Offline` depending on which mode is active.
+```php
+define( 'DIGITAL_WORLD_OLLAMA_MODEL', 'ministral-3:8b-instruct-2512-q4_K_M' );
+```
 
-Two filters let you change the setup: `digital_world_ai_model` changes the model, and `digital_world_anthropic_api_key` changes where the key comes from.
+- Use a `q4_K_M`, `q8_0` or `qat` tag. Tags without a suffix often point to `nvfp4`/MLX builds, which answer `501 structured output is unavailable`, so every request would fall through to the next provider.
+- Of the models that fit in 16 GB, `ministral-3:8b` gave the best results on a 24-case test (correct action, target and reply language in 46 of 48 runs, median 6 s). `gemma3:12b`, `qwen3.5:9b` and `qwen3.5:4b` scored 65–75% and were slower or returned empty replies.
+- Ollama does not start at login. `brew services run ollama` starts it until the next reboot, `brew services stop ollama` stops it, and `brew services start ollama` also turns on autostart. While idle it uses about 25 MB of memory; a loaded model takes about 6 GB and is unloaded after 5 minutes without requests.
+- When Ollama is not running, the request fails at once and the next provider answers.
