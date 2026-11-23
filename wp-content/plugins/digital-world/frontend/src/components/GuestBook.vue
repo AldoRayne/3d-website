@@ -49,14 +49,55 @@ const box = (rect: ScreenRect) => ({
 })
 
 const EDGE = 52
+const CLOSE_GAP = 28
+
+type Point = ScreenPoint
+
+const add = (a: Point, b: Point, scale = 1) => ({ x: a.x + b.x * scale, y: a.y + b.y * scale })
+const lerp = (a: Point, b: Point, t: number) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })
+const away = (from: Point, to: Point) => {
+  const length = Math.hypot(to.x - from.x, to.y - from.y) || 1
+  return { x: (to.x - from.x) / length, y: (to.y - from.y) / length }
+}
+
+function closePoint([topLeft, corner, bottomRight]: ScreenPoint[]): ScreenPoint {
+  const maxX = window.innerWidth - EDGE
+  const maxY = window.innerHeight - EDGE
+  const inside = (point: Point) => point.x >= EDGE && point.x <= maxX && point.y >= EDGE && point.y <= maxY
+  const outward = away(topLeft, corner)
+  const upward = away(bottomRight, corner)
+  const atCorner = add(add(corner, outward, CLOSE_GAP), upward, CLOSE_GAP)
+  if (inside(atCorner)) {
+    return atCorner
+  }
+  const slide = (end: Point, normal: Point) => {
+    const at = (t: number) => add(lerp(corner, end, t), normal, CLOSE_GAP)
+    if (!inside(at(1))) {
+      return null
+    }
+    let low = 0
+    let high = 1
+    for (let i = 0; i < 24; i++) {
+      const mid = (low + high) / 2
+      if (inside(at(mid))) {
+        high = mid
+      } else {
+        low = mid
+      }
+    }
+    return at(high)
+  }
+  const along = slide(topLeft, upward) ?? slide(bottomRight, outward)
+  if (along) {
+    return along
+  }
+  const clamp = (value: number, max: number) => Math.min(Math.max(value, EDGE), max)
+  return { x: clamp(atCorner.x, maxX), y: clamp(atCorner.y, maxY) }
+}
 
 const closeStyle = computed(() => {
-  const { right } = props.layout
-  const clamp = (value: number, max: number) => Math.min(Math.max(value, EDGE), max - EDGE)
-  return {
-    left: `${clamp(right.x + right.width, window.innerWidth)}px`,
-    top: `${clamp(right.y, window.innerHeight)}px`,
-  }
+  const point = closePoint(props.layout.rightQuad)
+  return { left: `${point.x}px`, top: `${point.y}px` }
 })
 </script>
 

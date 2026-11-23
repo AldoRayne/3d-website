@@ -44,6 +44,7 @@ export interface StandLayout {
   left: ScreenRect | null
   right: ScreenRect
   leftQuad: ScreenPoint[] | null
+  rightQuad: ScreenPoint[]
   pageAspect: number
 }
 
@@ -748,7 +749,7 @@ export class WorldScene {
     const key = layout
       ? [
           ...[layout.left, layout.right].map((rect) => (rect ? [rect.x, rect.y, rect.width, rect.height].map(Math.round).join(',') : '-')),
-          (layout.leftQuad ?? []).map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(';'),
+          ...[layout.leftQuad ?? [], layout.rightQuad].map((quad) => quad.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(';')),
         ].join('|')
       : ''
     if (key === this.standLayoutKey) {
@@ -765,11 +766,13 @@ export class WorldScene {
     const { book } = this.model.stand
     const spread = this.standSpread
     const left = spread ? book.pageCorners('left') : null
+    const right = book.pageCorners('right')
     this.emitStandLayout({
       spread,
       left: left ? this.screenRect(left) : null,
-      right: this.screenRect(book.pageCorners('right')),
+      right: this.screenRect(right),
       leftQuad: left ? this.screenPoints(left) : null,
+      rightQuad: this.screenPoints(right),
       pageAspect: book.pageHeight / book.pageWidth,
     })
   }

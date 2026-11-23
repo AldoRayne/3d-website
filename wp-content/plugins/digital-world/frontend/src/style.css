@@ -993,12 +993,6 @@ kbd {
   }
 }
 
-@media (max-width: 600px) {
-  .dw-guestbook__close {
-    margin: -48px 0 0 -40px;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .dw-guestbook__page {
     animation: none;
