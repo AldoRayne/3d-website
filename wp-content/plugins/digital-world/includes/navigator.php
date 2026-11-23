@@ -164,13 +164,15 @@ You are the AI Navigator of "{$site}", a website presented as an explorable 3D w
 
 One catalog entry, "@stand", is not a building but the guest book stand in the middle of the island, where visitors register, sign in and arrange their own island. Walking there works the same way; "open" also opens the book.
 
-Your job is to read the visitor's message and walk their character to the right building, then say one or two short sentences about where you took them and what they will find there. The visitor enters a building themselves.
+Your job is to read the visitor's message, reply in one or two short sentences, and decide whether to move their character. The visitor enters a building themselves.
+
+Move only when the visitor clearly asks for it: to go, be taken or led somewhere, to open or show a section, or asks where a section is or where they can do something. A question about the company, its services, prices, projects or any section is not a request to move: answer it from the catalog with "none", and you may offer to take them to the matching building. Greetings, thanks and small talk are "none" too.
 
 Choose exactly one action:
-- "navigate": walk to a building's door. Use it when the visitor wants to go somewhere or asks where something is.
-- "open": walk to a building's door so its card with details is shown. Use it when the visitor wants details, to read about, or to open a section.
-- "overview": show the whole world from above. Use it for "show everything", "go back", "where am I", or a greeting.
-- "none": answer without moving. Use it when no object fits; then suggest the closest sections by title.
+- "navigate": walk to a building's door, when the visitor asks to go there or where it is.
+- "open": walk to a building's door and show its card with details, when the visitor asks to open or show that section.
+- "overview": show the whole world from above, when the visitor asks to see everything, go back or zoom out.
+- "none": answer without moving. If no section fits, suggest the closest sections by title. If the catalog does not contain the answer, say so instead of guessing.
 
 The target must be the slug of one object from the catalog below, or an empty string for "overview" and "none". Never invent slugs or describe sections that are not in the catalog. Use "instant" transition only if the visitor asks to go immediately or without animation, otherwise "fly".
 
@@ -328,8 +330,10 @@ function digital_world_navigate_with_keywords( $message, array $objects ) {
 	$text = digital_world_normalize( $message );
 	$uk   = digital_world_is_cyrillic( $message );
 
-	$overview_words = array( 'огляд', 'всі', 'все', 'весь', 'назад', 'головн', 'де я', 'overview', 'all', 'everything', 'back', 'home', 'where am i', 'привіт', 'hello', 'hi' );
-	$open_words     = array( 'відкри', 'детал', 'прочита', 'розкаж', 'покажи', 'open', 'details', 'read', 'tell', 'show' );
+	$overview_words = array( 'огляд', 'все ', 'весь світ', 'увесь', 'зверху', 'назад', 'головн', 'overview', 'everything', 'from above', 'go back', 'home' );
+	$open_words     = array( 'відкри', 'покажи', 'open', 'show' );
+	$move_words     = array( 'веди', 'відведи', 'проведи', 'перейд', 'перейти', 'йди', 'іди', 'піти', 'летим', 'полети', 'хочу до', 'хочу в', 'де ', 'де можна', 'go to', 'take me', 'lead me', 'bring me', 'navigate', 'where' );
+	$greet_words    = array( 'привіт', 'вітаю', 'добрий день', 'дякую', ' hi ', 'hello', 'hey', 'thanks', 'thank you' );
 	$instant_words  = array( 'одразу', 'миттєво', 'швидко', 'instant', 'immediately', 'now' );
 
 	$best       = null;
@@ -363,9 +367,10 @@ function digital_world_navigate_with_keywords( $message, array $objects ) {
 		}
 	}
 
-	$has = static function ( array $words ) use ( $text ) {
+	$padded = ' ' . $text . ' ';
+	$has    = static function ( array $words ) use ( $padded ) {
 		foreach ( $words as $word ) {
-			if ( str_contains( $text, $word ) ) {
+			if ( str_contains( $padded, $word ) ) {
 				return true;
 			}
 		}
@@ -373,6 +378,17 @@ function digital_world_navigate_with_keywords( $message, array $objects ) {
 	};
 
 	$transition = $has( $instant_words ) ? 'instant' : 'fly';
+
+	if ( $best && ! $has( $open_words ) && ! $has( $move_words ) ) {
+		$reply = $uk
+			? sprintf( '«%s»: %s Скажіть «веди», і я відведу вас туди.', $best['title'], $best['description'] )
+			: sprintf( '"%s": %s Say "take me there" and I will lead you.', $best['title'], $best['description'] );
+		return array(
+			'reply'   => trim( $reply ),
+			'command' => digital_world_command( 'none' ),
+			'source'  => 'fallback',
+		);
+	}
 
 	if ( $best ) {
 		$action = $has( $open_words ) ? 'open' : 'navigate';
@@ -395,6 +411,17 @@ function digital_world_navigate_with_keywords( $message, array $objects ) {
 	}
 
 	$titles = implode( ', ', wp_list_pluck( $objects, 'title' ) );
+
+	if ( $has( $greet_words ) ) {
+		return array(
+			'reply'   => $uk
+				? sprintf( 'Вітаю! Я покажу дорогу будь-куди на острові. Тут є: %s.', $titles )
+				: sprintf( 'Hi! I can lead you anywhere on the island. Here you will find: %s.', $titles ),
+			'command' => digital_world_command( 'none' ),
+			'source'  => 'fallback',
+		);
+	}
+
 	return array(
 		'reply'   => $uk
 			? sprintf( 'Не знайшов такого розділу. Тут є: %s.', $titles )
