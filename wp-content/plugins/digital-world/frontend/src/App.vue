@@ -24,7 +24,7 @@ const scene = shallowRef<WorldScene | null>(null)
 const objects = ref<WorldObject[]>([])
 const siteName = ref(boot.siteName)
 const homeUrl = ref(boot.homeUrl)
-const aiEnabled = ref(boot.ai)
+const aiProvider = ref(boot.ai)
 const loading = ref(true)
 const error = ref('')
 const webgl = isWebGLAvailable()
@@ -431,7 +431,7 @@ onMounted(async () => {
     radius.value = world.island.radius
     siteName.value = world.site.name
     homeUrl.value = world.site.home
-    aiEnabled.value = world.ai
+    aiProvider.value = world.ai
     if (webgl && stage.value) {
       scene.value = new WorldScene(stage.value, {
         reducedMotion,
@@ -517,7 +517,7 @@ onBeforeUnmount(() => {
       </div>
       <DoorCard v-if="zoneObject" :object="zoneObject" :touch="touch" @enter="enter(zoneObject.slug)" />
       <StandCard v-else-if="showStandCard" :touch="touch" :visiting="!!visit" @open="openBook" />
-      <NavigatorChat :ai-enabled="aiEnabled" @command="runCommand" />
+      <NavigatorChat :provider="aiProvider" @command="runCommand" />
     </div>
 
     <GuestBook v-if="standLayout" :layout="standLayout" :passthrough="islandShown" :print-left="islandShown" @close="closeBook">

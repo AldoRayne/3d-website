@@ -17,10 +17,12 @@ export interface WorldObject {
 
 export interface WorldResponse {
   site: { name: string; home: string }
-  ai: boolean
+  ai: AiProvider | null
   island: { radius: number }
   objects: WorldObject[]
 }
+
+export type AiProvider = 'claude' | 'openai' | 'gemini'
 
 export type NavigatorAction = 'navigate' | 'open' | 'overview' | 'none'
 
@@ -36,6 +38,7 @@ export interface NavigatorResponse {
   reply: string
   command: NavigatorCommand
   source: 'ai' | 'fallback'
+  provider?: AiProvider
 }
 
 export interface ChatTurn {
@@ -48,7 +51,7 @@ export interface BootData {
   nonce: string
   homeUrl: string
   siteName: string
-  ai: boolean
+  ai: AiProvider | null
   world?: WorldResponse
   auth?: AuthBoot
   visit?: VisitBoot | null

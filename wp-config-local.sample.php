@@ -21,6 +21,14 @@ define( 'WP_DEBUG', true );
 
 define( 'DIGITAL_WORLD_ANTHROPIC_API_KEY', '' );
 
+// Providers are tried in order: Anthropic, OpenAI, Gemini. Empty key skips the provider.
+define( 'DIGITAL_WORLD_OPENAI_API_KEY', '' );
+define( 'DIGITAL_WORLD_OPENAI_MODEL', '' );
+
+// Gemini API key from https://aistudio.google.com/apikey (free tier available).
+define( 'DIGITAL_WORLD_GEMINI_API_KEY', '' );
+define( 'DIGITAL_WORLD_GEMINI_MODEL', '' );
+
 // Cloudflare Turnstile. Locally — the official test keys (always pass).
 // Always fail: site 2x00000000000000000000AB, secret 2x0000000000000000000000000000000AA.
 // Empty values disable the check.

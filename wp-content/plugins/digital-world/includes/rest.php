@@ -118,7 +118,7 @@ function digital_world_world_payload() {
 			'name' => get_bloginfo( 'name' ),
 			'home' => home_url( '/' ),
 		),
-		'ai'      => digital_world_ai_enabled(),
+		'ai'      => digital_world_ai_provider(),
 		'island'  => array( 'radius' => digital_world_island_radius() ),
 		'objects' => digital_world_get_objects(),
 	);

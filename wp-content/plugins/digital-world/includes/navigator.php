@@ -27,25 +27,97 @@ function digital_world_api_key() {
 	return apply_filters( 'digital_world_anthropic_api_key', $key );
 }
 
-function digital_world_ai_enabled() {
-	return '' !== digital_world_api_key() && class_exists( '\Anthropic\Client' );
+const DIGITAL_WORLD_COMPATIBLE_PROVIDERS = array(
+	'openai' => array(
+		'url'          => 'https://api.openai.com/v1/chat/completions',
+		'key'          => 'DIGITAL_WORLD_OPENAI_API_KEY',
+		'model'        => 'DIGITAL_WORLD_OPENAI_MODEL',
+		'default'      => 'gpt-5-mini',
+		'tokens_param' => 'max_completion_tokens',
+	),
+	'gemini' => array(
+		'url'          => 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+		'key'          => 'DIGITAL_WORLD_GEMINI_API_KEY',
+		'model'        => 'DIGITAL_WORLD_GEMINI_MODEL',
+		'default'      => 'gemini-3.5-flash-lite',
+		'tokens_param' => 'max_tokens',
+	),
+);
+
+function digital_world_provider_api_key( $provider ) {
+	$constant = DIGITAL_WORLD_COMPATIBLE_PROVIDERS[ $provider ]['key'];
+	$key      = defined( $constant ) ? (string) constant( $constant ) : '';
+	return apply_filters( "digital_world_{$provider}_api_key", $key );
+}
+
+function digital_world_provider_model( $provider ) {
+	$config = DIGITAL_WORLD_COMPATIBLE_PROVIDERS[ $provider ];
+	$model  = defined( $config['model'] ) ? (string) constant( $config['model'] ) : '';
+	return apply_filters( "digital_world_{$provider}_model", '' !== $model ? $model : $config['default'] );
+}
+
+function digital_world_ai_providers() {
+	$providers = array();
+	if ( '' !== digital_world_api_key() && class_exists( '\Anthropic\Client' ) ) {
+		$providers[] = 'claude';
+	}
+	foreach ( array_keys( DIGITAL_WORLD_COMPATIBLE_PROVIDERS ) as $provider ) {
+		if ( '' !== digital_world_provider_api_key( $provider ) ) {
+			$providers[] = $provider;
+		}
+	}
+	return $providers;
+}
+
+function digital_world_ai_provider() {
+	return digital_world_ai_providers()[0] ?? null;
 }
 
 function digital_world_navigate( $message, array $history = array() ) {
 	$objects = array_merge( digital_world_get_objects(), array( digital_world_stand_target() ) );
 
-	if ( digital_world_ai_enabled() ) {
+	foreach ( digital_world_ai_providers() as $provider ) {
 		try {
-			$result = digital_world_navigate_with_claude( $message, $history, $objects );
+			$result = 'claude' === $provider
+				? digital_world_navigate_with_claude( $message, $history, $objects )
+				: digital_world_navigate_with_compatible( $provider, $message, $history, $objects );
 			if ( $result ) {
 				return $result;
 			}
 		} catch ( \Throwable $e ) {
-			error_log( '[digital-world] Navigator AI error: ' . get_class( $e ) . ': ' . $e->getMessage() );
+			error_log( '[digital-world] Navigator ' . $provider . ' error: ' . get_class( $e ) . ': ' . $e->getMessage() );
 		}
 	}
 
 	return digital_world_navigate_with_keywords( $message, $objects );
+}
+
+function digital_world_chat_messages( $message, array $history ) {
+	$messages = array();
+	foreach ( $history as $turn ) {
+		$messages[] = array(
+			'role'    => $turn['role'],
+			'content' => $turn['content'],
+		);
+	}
+	$messages[] = array(
+		'role'    => 'user',
+		'content' => $message,
+	);
+	return $messages;
+}
+
+function digital_world_ai_result( $text, array $objects, $provider ) {
+	$data = json_decode( (string) $text, true );
+	if ( ! is_array( $data ) || ! isset( $data['reply'] ) ) {
+		return null;
+	}
+	return array(
+		'reply'    => wp_strip_all_tags( (string) $data['reply'] ),
+		'command'  => digital_world_validate_command( $data, $objects ),
+		'source'   => 'ai',
+		'provider' => $provider,
+	);
 }
 
 function digital_world_command( $action, $target = null, $transition = 'fly' ) {
@@ -146,18 +218,6 @@ function digital_world_navigate_with_claude( $message, array $history, array $ob
 		)
 	);
 
-	$messages = array();
-	foreach ( $history as $turn ) {
-		$messages[] = array(
-			'role'    => $turn['role'],
-			'content' => $turn['content'],
-		);
-	}
-	$messages[] = array(
-		'role'    => 'user',
-		'content' => $message,
-	);
-
 	$response = $client->messages->create(
 		model: digital_world_ai_model(),
 		maxTokens: 4096,
@@ -167,7 +227,7 @@ function digital_world_navigate_with_claude( $message, array $history, array $ob
 				'text' => digital_world_system_prompt( $objects ),
 			),
 		),
-		messages: $messages,
+		messages: digital_world_chat_messages( $message, $history ),
 		outputConfig: array(
 			'effort' => 'low',
 			'format' => array(
@@ -186,18 +246,72 @@ function digital_world_navigate_with_claude( $message, array $history, array $ob
 		if ( 'text' !== $block->type ) {
 			continue;
 		}
-		$data = json_decode( $block->text, true );
-		if ( ! is_array( $data ) || ! isset( $data['reply'] ) ) {
-			return null;
-		}
-		return array(
-			'reply'   => wp_strip_all_tags( (string) $data['reply'] ),
-			'command' => digital_world_validate_command( $data, $objects ),
-			'source'  => 'ai',
-		);
+		return digital_world_ai_result( $block->text, $objects, 'claude' );
 	}
 
 	return null;
+}
+
+function digital_world_navigate_with_compatible( $provider, $message, array $history, array $objects ) {
+	$config = DIGITAL_WORLD_COMPATIBLE_PROVIDERS[ $provider ];
+	$model  = digital_world_provider_model( $provider );
+	$body   = array(
+		'model'           => $model,
+		'messages'        => array_merge(
+			array(
+				array(
+					'role'    => 'system',
+					'content' => digital_world_system_prompt( $objects ),
+				),
+			),
+			digital_world_chat_messages( $message, $history )
+		),
+		'response_format' => array(
+			'type'        => 'json_schema',
+			'json_schema' => array(
+				'name'   => 'navigator_command',
+				'strict' => true,
+				'schema' => digital_world_output_schema( $objects ),
+			),
+		),
+	);
+	$body[ $config['tokens_param'] ] = 4096;
+	if ( preg_match( '/^(gpt-5|o\d|gemini-(2\.5|3))/', $model ) ) {
+		$body['reasoning_effort'] = 'low';
+	}
+	$body = apply_filters( "digital_world_{$provider}_request", $body );
+
+	$response = wp_remote_post(
+		$config['url'],
+		array(
+			'timeout' => 15,
+			'headers' => array(
+				'Authorization' => 'Bearer ' . digital_world_provider_api_key( $provider ),
+				'Content-Type'  => 'application/json',
+			),
+			'body'    => wp_json_encode( $body ),
+		)
+	);
+
+	if ( is_wp_error( $response ) ) {
+		error_log( '[digital-world] Navigator ' . $provider . ' request failed: ' . $response->get_error_message() );
+		return null;
+	}
+
+	$status = wp_remote_retrieve_response_code( $response );
+	$data   = json_decode( wp_remote_retrieve_body( $response ), true );
+	if ( 200 !== $status ) {
+		error_log( '[digital-world] Navigator ' . $provider . ' HTTP ' . $status . ': ' . ( $data['error']['message'] ?? $data[0]['error']['message'] ?? 'unknown error' ) );
+		return null;
+	}
+
+	$choice = $data['choices'][0] ?? null;
+	if ( ! $choice || 'stop' !== ( $choice['finish_reason'] ?? '' ) || ! empty( $choice['message']['refusal'] ) ) {
+		error_log( '[digital-world] Navigator ' . $provider . ' finish reason: ' . ( $choice['finish_reason'] ?? 'none' ) );
+		return null;
+	}
+
+	return digital_world_ai_result( $choice['message']['content'] ?? '', $objects, $provider );
 }
 
 function digital_world_normalize( $text ) {

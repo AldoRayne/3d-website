@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { nextTick, ref } from 'vue'
 import { askNavigator, ApiError } from '@/api'
-import type { ChatTurn, NavigatorCommand } from '@/types'
+import type { AiProvider, ChatTurn, NavigatorCommand } from '@/types'
 
-defineProps<{ aiEnabled: boolean }>()
+defineProps<{ provider: AiProvider | null }>()
+
+const PROVIDER_LABELS: Record<AiProvider, string> = { claude: 'Claude', openai: 'OpenAI', gemini: 'Gemini' }
 const emit = defineEmits<{ command: [command: NavigatorCommand] }>()
 
 interface Message extends ChatTurn {
@@ -79,7 +81,7 @@ async function send(text = draft.value) {
     <button type="button" class="dw-chat__toggle" :aria-expanded="open" aria-controls="dw-chat-body" @click="open = !open">
       <span class="dw-chat__orb" aria-hidden="true" />
       <span>AI Navigator</span>
-      <span class="dw-chat__mode">{{ aiEnabled ? 'Claude' : 'Offline' }}</span>
+      <span class="dw-chat__mode">{{ provider ? PROVIDER_LABELS[provider] : 'Offline' }}</span>
     </button>
 
     <div v-show="open" id="dw-chat-body" class="dw-chat__body">

@@ -11,7 +11,7 @@ export const boot: BootData = window.DigitalWorld ?? {
   nonce: '',
   homeUrl: '/',
   siteName: 'Digital World',
-  ai: false,
+  ai: null,
 }
 
 export class ApiError extends Error {
