@@ -5,7 +5,7 @@ import type { AiProvider, ChatTurn, NavigatorCommand } from '@/types'
 
 defineProps<{ provider: AiProvider | null }>()
 
-const PROVIDER_LABELS: Record<AiProvider, string> = { claude: 'Claude', openai: 'OpenAI', gemini: 'Gemini' }
+const PROVIDER_LABELS: Record<AiProvider, string> = { claude: 'Claude', ollama: 'Ollama', openai: 'OpenAI', gemini: 'Gemini' }
 const emit = defineEmits<{ command: [command: NavigatorCommand] }>()
 
 interface Message extends ChatTurn {

@@ -21,7 +21,11 @@ define( 'WP_DEBUG', true );
 
 define( 'DIGITAL_WORLD_ANTHROPIC_API_KEY', '' );
 
-// Providers are tried in order: Anthropic, OpenAI, Gemini. Empty key skips the provider.
+// Providers are tried in order: Anthropic, Ollama, OpenAI, Gemini. Empty key skips the provider.
+
+// Local Ollama (http://localhost:11434), no key; the model name enables it, e.g. 'qwen3.5:4b-q4_K_M' (nvfp4 tags lack structured output).
+define( 'DIGITAL_WORLD_OLLAMA_MODEL', '' );
+
 define( 'DIGITAL_WORLD_OPENAI_API_KEY', '' );
 define( 'DIGITAL_WORLD_OPENAI_MODEL', '' );
 

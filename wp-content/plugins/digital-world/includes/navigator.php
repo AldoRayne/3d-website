@@ -28,6 +28,15 @@ function digital_world_api_key() {
 }
 
 const DIGITAL_WORLD_COMPATIBLE_PROVIDERS = array(
+	'ollama' => array(
+		'url'              => 'http://localhost:11434/v1/chat/completions',
+		'key'              => null,
+		'model'            => 'DIGITAL_WORLD_OLLAMA_MODEL',
+		'default'          => '',
+		'tokens_param'     => 'max_tokens',
+		'timeout'          => 60,
+		'reasoning_effort' => 'none',
+	),
 	'openai' => array(
 		'url'          => 'https://api.openai.com/v1/chat/completions',
 		'key'          => 'DIGITAL_WORLD_OPENAI_API_KEY',
@@ -46,7 +55,7 @@ const DIGITAL_WORLD_COMPATIBLE_PROVIDERS = array(
 
 function digital_world_provider_api_key( $provider ) {
 	$constant = DIGITAL_WORLD_COMPATIBLE_PROVIDERS[ $provider ]['key'];
-	$key      = defined( $constant ) ? (string) constant( $constant ) : '';
+	$key      = $constant && defined( $constant ) ? (string) constant( $constant ) : '';
 	return apply_filters( "digital_world_{$provider}_api_key", $key );
 }
 
@@ -62,7 +71,8 @@ function digital_world_ai_providers() {
 		$providers[] = 'claude';
 	}
 	foreach ( array_keys( DIGITAL_WORLD_COMPATIBLE_PROVIDERS ) as $provider ) {
-		if ( '' !== digital_world_provider_api_key( $provider ) ) {
+		$keyless = null === DIGITAL_WORLD_COMPATIBLE_PROVIDERS[ $provider ]['key'];
+		if ( '' !== ( $keyless ? digital_world_provider_model( $provider ) : digital_world_provider_api_key( $provider ) ) ) {
 			$providers[] = $provider;
 		}
 	}
@@ -278,19 +288,24 @@ function digital_world_navigate_with_compatible( $provider, $message, array $his
 		),
 	);
 	$body[ $config['tokens_param'] ] = 4096;
-	if ( preg_match( '/^(gpt-5|o\d|gemini-(2\.5|3))/', $model ) ) {
+	if ( isset( $config['reasoning_effort'] ) ) {
+		$body['reasoning_effort'] = $config['reasoning_effort'];
+	} elseif ( preg_match( '/^(gpt-5|o\d|gemini-(2\.5|3))/', $model ) ) {
 		$body['reasoning_effort'] = 'low';
 	}
 	$body = apply_filters( "digital_world_{$provider}_request", $body );
 
+	$headers = array( 'Content-Type' => 'application/json' );
+	$key     = digital_world_provider_api_key( $provider );
+	if ( '' !== $key ) {
+		$headers['Authorization'] = 'Bearer ' . $key;
+	}
+
 	$response = wp_remote_post(
 		$config['url'],
 		array(
-			'timeout' => 15,
-			'headers' => array(
-				'Authorization' => 'Bearer ' . digital_world_provider_api_key( $provider ),
-				'Content-Type'  => 'application/json',
-			),
+			'timeout' => $config['timeout'] ?? 15,
+			'headers' => $headers,
 			'body'    => wp_json_encode( $body ),
 		)
 	);

@@ -22,7 +22,7 @@ export interface WorldResponse {
   objects: WorldObject[]
 }
 
-export type AiProvider = 'claude' | 'openai' | 'gemini'
+export type AiProvider = 'claude' | 'ollama' | 'openai' | 'gemini'
 
 export type NavigatorAction = 'navigate' | 'open' | 'overview' | 'none'
 
