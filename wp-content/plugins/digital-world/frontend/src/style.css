@@ -1,5 +1,6 @@
 :root {
   --dw-bg: #05070f;
+  --dw-veil: #fff4cf;
   --dw-surface: rgba(10, 16, 32, 0.78);
   --dw-surface-strong: rgba(12, 20, 40, 0.94);
   --dw-border: rgba(148, 178, 255, 0.16);
@@ -26,7 +27,7 @@ html,
 body.dw-body {
   margin: 0;
   height: 100%;
-  background: var(--dw-bg);
+  background: var(--dw-veil);
   color: var(--dw-text);
   font-family: var(--dw-font);
   -webkit-font-smoothing: antialiased;
@@ -307,6 +308,7 @@ input {
 
 .dw-app.is-static {
   overflow-y: auto;
+  background: var(--dw-bg);
 }
 
 .dw-side {
@@ -760,8 +762,8 @@ kbd {
 .dw-veil {
   position: absolute;
   inset: 0;
-  background: #fff4cf;
-  opacity: 0;
+  background: var(--dw-veil);
+  opacity: 1;
   pointer-events: none;
 }
 

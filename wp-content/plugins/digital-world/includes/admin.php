@@ -26,6 +26,26 @@ function digital_world_register_editor_page() {
 	);
 }
 
+function digital_world_manifest_imports( $name, array &$seen = array() ) {
+	$chunk = digital_world_manifest()[ $name ] ?? null;
+	if ( ! $chunk ) {
+		return array();
+	}
+	$files = array();
+	foreach ( (array) ( $chunk['imports'] ?? array() ) as $import ) {
+		if ( isset( $seen[ $import ] ) ) {
+			continue;
+		}
+		$seen[ $import ] = true;
+		$file            = digital_world_manifest()[ $import ]['file'] ?? null;
+		if ( $file ) {
+			$files[] = $file;
+		}
+		$files = array_merge( $files, digital_world_manifest_imports( $import, $seen ) );
+	}
+	return $files;
+}
+
 function digital_world_is_editor_screen( $hook ) {
 	return str_ends_with( (string) $hook, '_page_' . DIGITAL_WORLD_EDITOR_SLUG );
 }

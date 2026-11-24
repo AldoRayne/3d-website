@@ -106,6 +106,7 @@ export class WorldScene {
   private labels: CSS2DRenderer
   private pages: CSS3DRenderer
   private veil: HTMLDivElement
+  private revealed = false
   private scene = new THREE.Scene()
   private activeScene: THREE.Scene = this.scene
   private interior: Interior | null = null
@@ -232,6 +233,25 @@ export class WorldScene {
     this.resizeObserver.observe(container)
 
     this.loop()
+  }
+
+  async reveal() {
+    if (this.revealed) {
+      return
+    }
+    this.revealed = true
+    await this.renderer.compileAsync(this.scene, this.camera).catch(() => undefined)
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    if (this.disposed || this.interior) {
+      return
+    }
+    const veil = { value: Number(this.veil.style.opacity || 1) }
+    gsap.to(veil, {
+      value: 0,
+      duration: this.options.reducedMotion ? 0.01 : 0.5,
+      ease: 'power1.out',
+      onUpdate: () => (this.veil.style.opacity = String(veil.value)),
+    })
   }
 
   private get lowPower() {
@@ -608,7 +628,9 @@ export class WorldScene {
       this.interior = null
     }
     this.activeScene = this.scene
-    this.veil.style.opacity = '0'
+    if (this.revealed) {
+      this.veil.style.opacity = '0'
+    }
   }
 
   hurry() {

@@ -78,6 +78,10 @@ function digital_world_render_world() {
 		<?php foreach ( digital_world_manifest_css( DIGITAL_WORLD_ENTRY ) as $css ) : ?>
 	<link rel="stylesheet" href="<?php echo esc_url( DIGITAL_WORLD_URL . 'dist/' . $css ); ?>">
 		<?php endforeach; ?>
+	<link rel="modulepreload" href="<?php echo esc_url( DIGITAL_WORLD_URL . 'dist/' . $entry['file'] ); ?>">
+		<?php foreach ( digital_world_manifest_imports( DIGITAL_WORLD_ENTRY ) as $chunk ) : ?>
+	<link rel="modulepreload" href="<?php echo esc_url( DIGITAL_WORLD_URL . 'dist/' . $chunk ); ?>">
+		<?php endforeach; ?>
 	<?php endif; ?>
 	<script>window.DigitalWorld = <?php echo wp_json_encode( digital_world_boot_data(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE ); ?>;</script>
 </head>

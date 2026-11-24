@@ -563,6 +563,7 @@ onMounted(async () => {
       if (initial) {
         void openReading(initial, false)
       }
+      void scene.value.reveal()
       showHint(
         touch
           ? 'Тапніть по землі, щоб іти. Біля дверей натисніть «Увійти».'
