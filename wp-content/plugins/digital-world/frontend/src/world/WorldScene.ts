@@ -83,6 +83,17 @@ function wait(ms: number) {
   return new Promise<null>((resolve) => window.setTimeout(() => resolve(null), ms))
 }
 
+function removeEnterButton(frame: HTMLIFrameElement) {
+  const button = frame.contentDocument?.querySelector('.dw-enter')
+  if (!button) {
+    return
+  }
+  if (button.nextElementSibling?.tagName === 'STYLE') {
+    button.nextElementSibling.remove()
+  }
+  button.remove()
+}
+
 function headingOf(direction: THREE.Vector3) {
   return Math.atan2(direction.x, direction.z)
 }
@@ -537,7 +548,14 @@ export class WorldScene {
     frame.style.width = `${width}px`
     frame.style.height = `${height}px`
     const loaded = new Promise<void>((resolve) => {
-      frame.addEventListener('load', () => resolve(), { once: true })
+      frame.addEventListener(
+        'load',
+        () => {
+          removeEnterButton(frame)
+          resolve()
+        },
+        { once: true },
+      )
       window.setTimeout(resolve, 4000)
     })
     return { frame, width, height, loaded }
@@ -1016,7 +1034,14 @@ export class WorldScene {
     })
     document.body.appendChild(frame)
     return new Promise<HTMLIFrameElement>((resolve) => {
-      frame.addEventListener('load', () => resolve(frame), { once: true })
+      frame.addEventListener(
+        'load',
+        () => {
+          removeEnterButton(frame)
+          resolve(frame)
+        },
+        { once: true },
+      )
       window.setTimeout(() => resolve(frame), 8000)
     })
   }
