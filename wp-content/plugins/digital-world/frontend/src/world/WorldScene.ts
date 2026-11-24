@@ -15,6 +15,8 @@ import { Player, PLAYER_RADIUS } from './Player'
 import { WorldModel, type Building } from './WorldModel'
 import { STAND_READ_DISTANCE, STAND_READER_DISTANCE, STAND_SLUG } from './stand'
 import { MiniIsland } from './island'
+import { PageFigure } from './figure'
+import type { Avatar } from './avatar'
 import type { Placement, PlacementProblem } from './WorldModel'
 
 export { isEditableTarget, isWebGLAvailable } from './dom'
@@ -58,6 +60,7 @@ export interface WorldSceneOptions {
   onIslandChange?: (placements: Map<string, Placement>) => void
   onLink?: (href: string) => void
   reducedMotion?: boolean
+  avatar?: Avatar
 }
 
 const WALK_SPEED = 5.2
@@ -128,6 +131,9 @@ export class WorldScene {
   private islandTilt = 0
   private islandTween: gsap.core.Tween | null = null
   private islandPress: { id: number; x: number; y: number; dragging: boolean } | null = null
+  private figure: PageFigure | null = null
+  private figureReady = false
+  private figurePress: { id: number; x: number } | null = null
   private frame = 0
   private resizeObserver: ResizeObserver
   private disposed = false
@@ -206,6 +212,9 @@ export class WorldScene {
     this.marker.visible = false
 
     this.model = new WorldModel({ shadows: this.shadows, standLeaf: true })
+    if (options.avatar) {
+      this.player.setAvatar(options.avatar)
+    }
     this.scene.add(this.player.root, this.marker, this.model.root)
 
     const canvas = this.renderer.domElement
@@ -669,10 +678,17 @@ export class WorldScene {
     const island = this.island
     const state = { grow: 0 }
     const tl = gsap.timeline()
-    if (turn) {
+    let start = 0
+    if (this.figure) {
+      book.setLeaf(1)
+      this.shrinkFigure(tl, 0)
+      tl.add(book.turnTimeline(false), 0.4)
+      start = 1.15
+    } else if (turn) {
       tl.add(book.turnTimeline(true), 0)
+      start = 0.75
     }
-    tl.to(state, { grow: 1, duration: ISLAND_GROW, ease: 'none', onUpdate: () => island.setGrowth(state.grow) }, turn ? 0.75 : 0)
+    tl.to(state, { grow: 1, duration: ISLAND_GROW, ease: 'none', onUpdate: () => island.setGrowth(state.grow) }, start)
     this.speed = this.options.reducedMotion ? 50 : 1
     return this.play(tl).then((done) => {
       if (done && this.island === island) {
@@ -681,6 +697,111 @@ export class WorldScene {
       }
       return done
     })
+  }
+
+  get avatarShown() {
+    return this.figureReady
+  }
+
+  showAvatar(avatar: Avatar): Promise<boolean> {
+    if (this.standState !== 'open' || this.figure) {
+      return Promise.resolve(false)
+    }
+    const { book } = this.model.stand
+    const tl = gsap.timeline()
+    let start = 0
+    if (this.island) {
+      this.shrinkIsland(tl, 0)
+      start = 0.4
+    }
+    book.setLeaf(0)
+    tl.add(book.turnTimeline(true), start)
+    const compact = !this.standSpread
+    const figure = new PageFigure(book.pageAnchor, this.pageUp(), book.pageWidth, book.pageHeight, avatar, {
+      fill: compact ? 0.5 : 0.52,
+      shift: compact ? 0.2 : 0.06,
+    })
+    this.figure = figure
+    const state = { grow: 0 }
+    tl.to(state, { grow: 1, duration: 1.2, ease: 'none', onUpdate: () => figure.setGrowth(state.grow) }, start + 0.75)
+    this.speed = this.options.reducedMotion ? 50 : 1
+    return this.play(tl).then((done) => {
+      if (done && this.figure === figure) {
+        figure.setGrowth(1)
+        this.figureReady = true
+      }
+      return done
+    })
+  }
+
+  updateAvatar(avatar: Avatar) {
+    this.figure?.setAvatar(avatar)
+  }
+
+  setPlayerAvatar(avatar: Avatar) {
+    this.player.setAvatar(avatar)
+  }
+
+  private pageUp() {
+    const { book } = this.model.stand
+    const [topLeft, , , bottomLeft] = book.pageCorners('right')
+    book.pageAnchor.updateWorldMatrix(true, false)
+    const up = book.pageAnchor.worldToLocal(topLeft.clone()).sub(book.pageAnchor.worldToLocal(bottomLeft.clone()))
+    up.y = 0
+    return up.lengthSq() > 1e-8 ? up.normalize() : new THREE.Vector3(0, 0, -1)
+  }
+
+  private shrinkIsland(tl: gsap.core.Timeline, at: number) {
+    const island = this.island
+    if (!island) {
+      return
+    }
+    this.islandReady = false
+    island.select(null)
+    this.islandTween?.kill()
+    this.islandTween = null
+    const state = { grow: 1, tilt: this.islandTilt }
+    tl.to(state, { tilt: 0, duration: 0.6, ease: 'power2.inOut', onUpdate: () => (this.islandTilt = state.tilt) }, at)
+    tl.to(state, { grow: 0, duration: 0.45, ease: 'power1.in', onUpdate: () => island.setGrowth(state.grow) }, at)
+    tl.call(
+      () => {
+        if (this.island === island) {
+          this.islandTilt = 0
+          this.islandPress = null
+          island.dispose()
+          this.island = null
+        }
+      },
+      [],
+      at + 0.6,
+    )
+  }
+
+  private shrinkFigure(tl: gsap.core.Timeline, at: number) {
+    const figure = this.figure
+    if (!figure) {
+      return
+    }
+    this.figureReady = false
+    this.figurePress = null
+    const state = { grow: 1 }
+    tl.to(state, { grow: 0, duration: 0.45, ease: 'power1.in', onUpdate: () => figure.setGrowth(state.grow) }, at)
+    tl.call(
+      () => {
+        if (this.figure === figure) {
+          this.disposeFigure()
+        }
+      },
+      [],
+      at + 0.45,
+    )
+  }
+
+  private disposeFigure() {
+    this.figureReady = false
+    this.figurePress = null
+    this.figure?.dispose()
+    this.figure = null
   }
 
   updateIsland(objects: WorldObject[], radius: number) {
@@ -712,24 +833,19 @@ export class WorldScene {
     this.options.onIslandSelect?.(this.island?.selected ?? null)
   }
 
-  hideIsland(): Promise<boolean> {
-    const island = this.island
-    if (!island || this.standState !== 'open') {
+  hidePage(): Promise<boolean> {
+    if ((!this.island && !this.figure) || this.standState !== 'open') {
       return Promise.resolve(false)
     }
-    this.islandReady = false
-    island.select(null)
-    this.islandTween?.kill()
-    const state = { grow: 1, tilt: this.islandTilt }
+    const { book } = this.model.stand
     const tl = gsap.timeline()
-    tl.to(state, { tilt: 0, duration: 0.6, ease: 'power2.inOut', onUpdate: () => (this.islandTilt = state.tilt) }, 0)
-    tl.to(state, { grow: 0, duration: 0.45, ease: 'power1.in', onUpdate: () => island.setGrowth(state.grow) }, 0)
-    tl.add(this.model.stand.book.turnTimeline(false), 0.4)
+    this.shrinkIsland(tl, 0)
+    this.shrinkFigure(tl, 0)
+    tl.add(book.turnTimeline(false), 0.4)
     this.speed = this.options.reducedMotion ? 50 : 1
     return this.play(tl).then((done) => {
-      if (this.island === island) {
-        this.disposeIsland()
-      }
+      this.disposeIsland()
+      this.disposeFigure()
       return done
     })
   }
@@ -829,6 +945,7 @@ export class WorldScene {
       if (this.standState === 'closing') {
         this.standState = 'closed'
         this.disposeIsland()
+        this.disposeFigure()
         this.player.reach(0)
         this.look.copy(this.cinematicLook)
         this.mode = 'chase'
@@ -898,6 +1015,11 @@ export class WorldScene {
       this.islandReady = false
       island.select(null)
       tl.to(state, { grow: 0, duration: 0.45, ease: 'power1.in', onUpdate: () => island.setGrowth(state.grow) }, 0)
+    }
+    if (this.figure) {
+      this.shrinkFigure(tl, 0)
+    }
+    if (island || this.figure) {
       tl.add(this.model.stand.book.turnTimeline(false), 0.4)
       start = 1.25
     }
@@ -1359,7 +1481,37 @@ export class WorldScene {
     }
   }
 
+  private onFigureDown(event: PointerEvent) {
+    this.figurePress = { id: event.pointerId, x: event.clientX }
+    this.renderer.domElement.setPointerCapture(event.pointerId)
+    this.renderer.domElement.style.cursor = 'grabbing'
+  }
+
+  private onFigureMove(event: PointerEvent) {
+    const press = this.figurePress
+    if (press && press.id === event.pointerId) {
+      this.figure?.rotateBy((event.clientX - press.x) * 0.012)
+      press.x = event.clientX
+      return
+    }
+    if (event.pointerType === 'mouse' && this.figure) {
+      this.setPointer(event)
+      this.renderer.domElement.style.cursor = this.figure.pick(this.raycaster) ? 'grab' : ''
+    }
+  }
+
+  private onFigureUp(event: PointerEvent) {
+    if (this.figurePress?.id === event.pointerId) {
+      this.figurePress = null
+      this.renderer.domElement.style.cursor = ''
+    }
+  }
+
   private onPointerDown = (event: PointerEvent) => {
+    if (this.figureReady && this.figure) {
+      this.onFigureDown(event)
+      return
+    }
     if (this.islandReady && this.island) {
       this.onIslandDown(event)
       return
@@ -1373,6 +1525,10 @@ export class WorldScene {
   }
 
   private onPointerMove = (event: PointerEvent) => {
+    if (this.figureReady && this.figure) {
+      this.onFigureMove(event)
+      return
+    }
     if (this.islandReady && this.island) {
       this.onIslandMove(event)
       return
@@ -1401,6 +1557,10 @@ export class WorldScene {
   }
 
   private onPointerUp = (event: PointerEvent) => {
+    if (this.figurePress) {
+      this.onFigureUp(event)
+      return
+    }
     if (this.islandReady && this.island) {
       this.onIslandUp(event)
       return
@@ -1525,6 +1685,7 @@ export class WorldScene {
     this.stepPlayer(dt)
     this.updateZone()
     this.player.animate(dt, this.moveSpeed, elapsed, !!this.options.reducedMotion)
+    this.figure?.update(dt, elapsed, !!this.options.reducedMotion)
     this.updateCamera(dt)
     this.updateStandLayout()
     this.player.root.visible =
@@ -1569,6 +1730,7 @@ export class WorldScene {
     cancelAnimationFrame(this.frame)
     foliageUniforms.uSeeStrength.value = 0
     this.space?.dispose()
+    this.disposeFigure()
     this.leaveInterior()
     this.cancelWalk()
     this.resizeObserver.disconnect()

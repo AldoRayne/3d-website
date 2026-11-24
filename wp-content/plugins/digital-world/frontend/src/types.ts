@@ -1,3 +1,5 @@
+import type { AvatarPatch } from '@/world/avatar'
+
 export type DoorSide = 'auto' | 'north' | 'east' | 'south' | 'west'
 
 export interface WorldObject {
@@ -61,6 +63,7 @@ export interface VisitBoot {
   id: number
   name: string
   layout: Layout | []
+  avatar?: AvatarPatch | []
   returnUrl: string
 }
 
@@ -72,6 +75,7 @@ export interface AuthUser {
   name: string
   canAdmin?: boolean
   layout?: Layout
+  avatar?: AvatarPatch | []
 }
 
 export interface AuthBoot {

@@ -3,6 +3,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js'
 import type { WorldObject } from '@/types'
 import { checkPlacement, MIN_RADIUS, WorldModel, type Placement, type PlacementProblem } from '@/world/WorldModel'
+import { Player } from '@/world/Player'
+import type { Avatar } from '@/world/avatar'
 
 export interface EditorCallbacks {
   onSelect: (slug: string | null) => void
@@ -38,6 +40,7 @@ export class WorldEditor {
   private frame = 0
   private resizeObserver: ResizeObserver
   private disposed = false
+  private player: Player | null = null
 
   constructor(
     private container: HTMLElement,
@@ -138,6 +141,14 @@ export class WorldEditor {
     label.addEventListener('click', () => this.select(slug))
     building.anchor.add(new CSS2DObject(label))
     this.labelButtons.set(slug, label)
+  }
+
+  showPlayer(avatar: Avatar) {
+    this.player ??= new Player(avatar)
+    this.player.setAvatar(avatar)
+    this.player.position.copy(this.model.spawn)
+    this.player.heading = this.model.spawnHeading
+    this.scene.add(this.player.root)
   }
 
   updateObject(object: WorldObject) {
@@ -434,6 +445,7 @@ export class WorldEditor {
   dispose() {
     this.disposed = true
     cancelAnimationFrame(this.frame)
+    this.player?.dispose()
     this.resizeObserver.disconnect()
     this.controls.dispose()
     this.renderer.dispose()

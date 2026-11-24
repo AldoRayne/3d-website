@@ -32,6 +32,12 @@ function shade(hex: string, amount: number) {
   return `#${color.getHexString()}`
 }
 
+function trim(hex: string) {
+  const hsl = { h: 0, s: 0, l: 0 }
+  new THREE.Color(hex).getHSL(hsl)
+  return hsl.l > 0.7 ? shade(hex, -0.3) : '#f3e3c8'
+}
+
 function px(ctx: Ctx, x: number, y: number, color: string) {
   ctx.fillStyle = color
   ctx.fillRect(x, y, 1, 1)
@@ -231,61 +237,116 @@ const painters: Record<string, (ctx: Ctx, rnd: Random, arg: string) => void> = {
     ctx.fillStyle = '#6e4825'
     ctx.fillRect(0, SIZE - 1, SIZE, 1)
   },
-  face(ctx) {
-    ctx.fillStyle = '#efc29a'
+  face(ctx, _rnd, arg) {
+    const [skin, hair, style, kind] = arg.split('|')
+    ctx.fillStyle = skin
     ctx.fillRect(0, 0, SIZE, SIZE)
-    ctx.fillStyle = '#3a2618'
-    ctx.fillRect(0, 0, SIZE, 4)
-    ctx.fillRect(0, 4, 2, 2)
-    ctx.fillRect(14, 4, 2, 2)
+    ctx.fillStyle = hair
+    if (style === 'buzz') {
+      ctx.fillRect(0, 0, SIZE, 2)
+    } else {
+      ctx.fillRect(0, 0, SIZE, 4)
+      ctx.fillRect(0, 4, 2, 2)
+      ctx.fillRect(14, 4, 2, 2)
+      if (style === 'long') {
+        ctx.fillRect(0, 6, 1, 8)
+        ctx.fillRect(15, 6, 1, 8)
+      }
+    }
+    if (kind === 'beard') {
+      ctx.fillRect(0, 8, 2, 8)
+      ctx.fillRect(14, 8, 2, 8)
+      ctx.fillRect(2, 11, 12, 5)
+    }
     ctx.fillStyle = '#ffffff'
     ctx.fillRect(3, 7, 3, 2)
     ctx.fillRect(10, 7, 3, 2)
     ctx.fillStyle = '#2a3b55'
     ctx.fillRect(4, 7, 2, 2)
     ctx.fillRect(10, 7, 2, 2)
-    ctx.fillStyle = '#5a3a26'
+    ctx.fillStyle = shade(hair, 0.08)
     ctx.fillRect(3, 6, 3, 1)
     ctx.fillRect(10, 6, 3, 1)
-    ctx.fillStyle = '#c4875f'
+    ctx.fillStyle = shade(skin, -0.14)
     ctx.fillRect(7, 9, 2, 2)
+    if (kind === 'freckles') {
+      ctx.fillStyle = shade(skin, -0.2)
+      for (const [x, y] of [[3, 10], [5, 10], [4, 11], [10, 10], [12, 10], [11, 11]]) {
+        ctx.fillRect(x, y, 1, 1)
+      }
+    }
     ctx.fillStyle = '#9b4f3a'
-    ctx.fillRect(5, 12, 6, 1)
+    if (kind === 'smile') {
+      ctx.fillRect(5, 12, 1, 1)
+      ctx.fillRect(10, 12, 1, 1)
+      ctx.fillRect(6, 13, 4, 1)
+    } else if (kind === 'beard') {
+      ctx.fillRect(6, 12, 4, 1)
+    } else {
+      ctx.fillRect(5, 12, 6, 1)
+    }
   },
-  headSide(ctx) {
-    ctx.fillStyle = '#efc29a'
+  headSide(ctx, _rnd, arg) {
+    const [skin, hair, style, kind, side] = arg.split('|')
+    const at = (x: number, y: number, w: number, h: number) => ctx.fillRect(side === 'left' ? SIZE - x - w : x, y, w, h)
+    ctx.fillStyle = skin
     ctx.fillRect(0, 0, SIZE, SIZE)
-    ctx.fillStyle = '#3a2618'
-    ctx.fillRect(0, 0, SIZE, 6)
-    ctx.fillRect(10, 6, 6, 4)
+    ctx.fillStyle = hair
+    if (style === 'buzz') {
+      ctx.fillRect(0, 0, SIZE, 2)
+      at(12, 2, 4, 3)
+    } else {
+      ctx.fillRect(0, 0, SIZE, 6)
+      at(10, 6, 6, 4)
+      if (style === 'long') {
+        at(6, 6, 10, 8)
+      }
+    }
+    if (kind === 'beard') {
+      at(0, 8, 6, 8)
+    }
   },
-  headBack(ctx) {
-    ctx.fillStyle = '#3a2618'
-    ctx.fillRect(0, 0, SIZE, 12)
-    ctx.fillStyle = '#efc29a'
-    ctx.fillRect(0, 12, SIZE, 4)
+  headBack(ctx, _rnd, arg) {
+    const [skin, hair, style] = arg.split('|')
+    const rows = style === 'buzz' ? 6 : style === 'long' ? SIZE : 12
+    ctx.fillStyle = skin
+    ctx.fillRect(0, 0, SIZE, SIZE)
+    ctx.fillStyle = hair
+    ctx.fillRect(0, 0, SIZE, rows)
   },
-  hair(ctx, rnd) {
-    noise(ctx, rnd, ['#3a2618', '#43301f', '#33211a'])
+  hair(ctx, rnd, arg) {
+    const [skin, hair, style] = arg.split('|')
+    noise(ctx, rnd, style === 'buzz' ? [hair, shade(hair, 0.06), skin] : tones(hair, 0.05))
   },
-  jacket(ctx, rnd) {
-    noise(ctx, rnd, ['#e07a3c', '#d9733a', '#e6844a'])
-    ctx.fillStyle = '#f3e3c8'
+  knit(ctx, rnd, color) {
+    noise(ctx, rnd, tones(color, 0.04))
+    ctx.fillStyle = shade(color, -0.1)
+    for (let x = 1; x < SIZE; x += 3) {
+      ctx.fillRect(x, 0, 1, SIZE)
+    }
+  },
+  cloth(ctx, rnd, color) {
+    noise(ctx, rnd, tones(color, 0.035))
+  },
+  jacket(ctx, rnd, color) {
+    noise(ctx, rnd, tones(color, 0.035))
+    ctx.fillStyle = trim(color)
     ctx.fillRect(7, 0, 2, SIZE)
   },
-  sleeve(ctx, rnd) {
-    noise(ctx, rnd, ['#e07a3c', '#d9733a', '#e6844a'])
-    ctx.fillStyle = '#efc29a'
+  sleeve(ctx, rnd, arg) {
+    const [color, skin] = arg.split('|')
+    noise(ctx, rnd, tones(color, 0.035))
+    ctx.fillStyle = skin
     ctx.fillRect(0, SIZE - 4, SIZE, 4)
   },
-  pants(ctx, rnd) {
-    noise(ctx, rnd, ['#6d6a3e', '#666339', '#737044'])
+  pants(ctx, rnd, color) {
+    noise(ctx, rnd, tones(color, 0.035))
     ctx.fillStyle = '#3b3328'
     ctx.fillRect(0, SIZE - 3, SIZE, 3)
   },
-  pack(ctx, rnd) {
-    noise(ctx, rnd, ['#4f6b4a', '#486244', '#577452'])
-    ctx.fillStyle = '#2f3f2c'
+  pack(ctx, rnd, color) {
+    noise(ctx, rnd, tones(color, 0.035))
+    ctx.fillStyle = shade(color, -0.12)
     ctx.fillRect(0, 5, SIZE, 1)
     ctx.fillStyle = '#c9a24a'
     ctx.fillRect(7, 6, 2, 2)

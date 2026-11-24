@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { boot, request } from '@/api'
 import type { AuthBoot, AuthUser, Layout } from '@/types'
+import { avatarDiff, resolveAvatar, type Avatar, type AvatarPatch } from '@/world/avatar'
 
 export const authConfig: AuthBoot = boot.auth ?? {
   user: null,
@@ -57,4 +58,18 @@ export async function saveLayout(layout: Layout) {
 export async function resetLayout() {
   const data = await request<LayoutResponse>('/layout', { method: 'DELETE' })
   return normalize(data.layout)
+}
+
+interface AvatarResponse {
+  avatar: AvatarPatch | []
+}
+
+export async function saveAvatar(avatar: Avatar) {
+  const data = await request<AvatarResponse>('/avatar', { method: 'PUT', body: JSON.stringify({ avatar: avatarDiff(avatar) }) })
+  return resolveAvatar(data.avatar)
+}
+
+export async function resetAvatar() {
+  const data = await request<AvatarResponse>('/avatar', { method: 'DELETE' })
+  return resolveAvatar(data.avatar)
 }

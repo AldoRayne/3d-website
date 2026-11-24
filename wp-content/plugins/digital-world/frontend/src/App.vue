@@ -4,11 +4,13 @@ import { boot, fetchWorld } from '@/api'
 import type { CameraTransition, Layout, NavigatorCommand, WorldObject } from '@/types'
 import { isEditableTarget, isWebGLAvailable, WorldScene, type StandLayout } from '@/world/WorldScene'
 import { STAND_SLUG } from '@/world/stand'
-import { currentUser, logout, resetLayout, saveLayout } from '@/auth'
+import { currentUser, logout, resetAvatar, resetLayout, saveAvatar, saveLayout } from '@/auth'
+import { resolveAvatar, sameAvatar, type Avatar } from '@/world/avatar'
 import { applyLayout, layoutDiff } from '@/world/layout'
 import type { Placement, PlacementProblem } from '@/world/WorldModel'
 import IslandToolbar from '@/components/IslandToolbar.vue'
 import IslandGuide from '@/components/IslandGuide.vue'
+import AvatarEditor from '@/components/AvatarEditor.vue'
 import ObjectList from '@/components/ObjectList.vue'
 import DoorCard from '@/components/DoorCard.vue'
 import StandCard from '@/components/StandCard.vue'
@@ -46,13 +48,23 @@ const islandMode = ref<'top' | 'angled'>('top')
 const islandSelected = ref<string | null>(null)
 const islandProblem = ref('')
 const saveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
+const bookPage = ref<'island' | 'avatar'>('island')
+const avatarShown = ref(false)
+const pageTurning = ref(false)
+const avatar = ref<Avatar>(resolveAvatar(currentUser.value?.avatar))
+const avatarStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
 let worldDirty = false
 let saveTimer = 0
 let pendingSave: Promise<void> | null = null
+let avatarTimer = 0
+let pendingAvatar: Promise<void> | null = null
 let hintTimer = 0
 
 const visit = boot.visit ?? null
 const visitLayout: Layout = visit && !Array.isArray(visit.layout) ? visit.layout : {}
+const worldAvatar = () => (visit ? resolveAvatar(visit.avatar) : avatar.value)
+const memberPage = computed(() => islandShown.value || avatarShown.value)
+const pageStatus = computed(() => (bookPage.value === 'avatar' ? avatarStatus.value : saveStatus.value))
 const worldObjects = () =>
   visit
     ? applyLayout(objects.value, visitLayout, radius.value)
@@ -213,12 +225,101 @@ async function showIsland(turn: boolean) {
   islandProblem.value = ''
   saveStatus.value = 'idle'
   islandMode.value = 'top'
+  bookPage.value = 'island'
   islandOpening.value = true
   const shown = await scene.value.showIsland(worldObjects(), radius.value, turn)
   islandOpening.value = false
   if (shown) {
     islandShown.value = true
   }
+}
+
+async function showAvatarPage() {
+  if (!scene.value || !bookOpen.value) {
+    return
+  }
+  avatarStatus.value = 'idle'
+  bookPage.value = 'avatar'
+  islandOpening.value = true
+  const shown = await scene.value.showAvatar(avatar.value)
+  islandOpening.value = false
+  if (shown) {
+    avatarShown.value = true
+  }
+}
+
+async function switchPage(page: 'island' | 'avatar') {
+  if (page === bookPage.value || pageTurning.value || !memberPage.value) {
+    return
+  }
+  pageTurning.value = true
+  islandShown.value = false
+  avatarShown.value = false
+  islandSelected.value = null
+  islandProblem.value = ''
+  try {
+    await (page === 'avatar' ? showAvatarPage() : showIsland(false))
+  } finally {
+    pageTurning.value = false
+  }
+}
+
+function onAvatarChange(next: Avatar) {
+  avatar.value = next
+  scene.value?.updateAvatar(next)
+  scene.value?.setPlayerAvatar(next)
+  avatarStatus.value = 'saving'
+  window.clearTimeout(avatarTimer)
+  avatarTimer = window.setTimeout(() => void flushAvatar(), 500)
+}
+
+function flushAvatar() {
+  window.clearTimeout(avatarTimer)
+  const snapshot = avatar.value
+  pendingAvatar = saveAvatar(snapshot)
+    .then((saved) => {
+      if (avatar.value === snapshot) {
+        avatarStatus.value = 'saved'
+      }
+      if (currentUser.value) {
+        currentUser.value = { ...currentUser.value, avatar: saved }
+      }
+    })
+    .catch(() => {
+      avatarStatus.value = 'error'
+    })
+    .finally(() => {
+      pendingAvatar = null
+    })
+  return pendingAvatar
+}
+
+async function resetCharacter() {
+  window.clearTimeout(avatarTimer)
+  avatarStatus.value = 'saving'
+  try {
+    const next = await resetAvatar()
+    avatar.value = next
+    scene.value?.updateAvatar(next)
+    scene.value?.setPlayerAvatar(next)
+    if (currentUser.value) {
+      currentUser.value = { ...currentUser.value, avatar: next }
+    }
+    avatarStatus.value = 'saved'
+  } catch {
+    avatarStatus.value = 'error'
+  }
+}
+
+function resetPage() {
+  void (bookPage.value === 'avatar' ? resetCharacter() : resetIsland())
+}
+
+function flushPending() {
+  return Promise.all([
+    saveStatus.value === 'saving' ? flushSave() : null,
+    avatarStatus.value === 'saving' ? flushAvatar() : null,
+  ])
 }
 
 let signedInTimer = 0
@@ -229,6 +330,11 @@ watch(currentUser, (user, previous) => {
   }
   layout.value = user?.layout ?? {}
   worldDirty = true
+  const next = resolveAvatar(user?.avatar)
+  if (!sameAvatar(next, avatar.value)) {
+    avatar.value = next
+    scene.value?.setPlayerAvatar(next)
+  }
   if (user && !previous && bookOpen.value) {
     window.clearTimeout(signedInTimer)
     signedInTimer = window.setTimeout(() => void showIsland(true), 1300)
@@ -291,12 +397,11 @@ function rotateIsland() {
 }
 
 async function signOutFromIsland() {
-  if (saveStatus.value === 'saving') {
-    await flushSave()
-  }
+  await flushPending()
   islandClosing.value = true
   islandShown.value = false
-  await scene.value?.hideIsland()
+  avatarShown.value = false
+  await scene.value?.hidePage()
   try {
     await logout()
   } catch {
@@ -311,11 +416,11 @@ async function closeBook() {
   if (!scene.value || !bookOpen.value) {
     return
   }
-  if (saveStatus.value === 'saving') {
-    void flushSave()
-  }
+  void flushPending()
   standLayout.value = null
   islandShown.value = false
+  avatarShown.value = false
+  bookPage.value = 'island'
   islandOpening.value = false
   islandSelected.value = null
   islandProblem.value = ''
@@ -443,6 +548,7 @@ onMounted(async () => {
         onIslandSelect: (slug) => (islandSelected.value = slug),
         onIslandProblem: (problem) => (islandProblem.value = problem ? PROBLEMS[problem] : ''),
         onIslandChange,
+        avatar: worldAvatar(),
       })
       scene.value.setObjects(worldObjects(), world.island.radius)
       worldDirty = false
@@ -520,7 +626,7 @@ onBeforeUnmount(() => {
       <NavigatorChat :provider="aiProvider" @command="runCommand" />
     </div>
 
-    <GuestBook v-if="standLayout" :layout="standLayout" :passthrough="islandShown" :print-left="islandShown" @close="closeBook">
+    <GuestBook v-if="standLayout" :layout="standLayout" :passthrough="memberPage" :print-left="memberPage" @close="closeBook">
       <template v-if="standLayout.left" #left>
         <Transition name="dw-bookpage-fade">
           <IslandGuide
@@ -529,13 +635,14 @@ onBeforeUnmount(() => {
             :selected="islandSelected"
             @select="(slug) => scene?.selectIsland(slug)"
           />
-          <GuestBookPage v-else-if="!islandOpening && !islandClosing" side="left" :autofocus="!touch" />
+          <AvatarEditor v-else-if="avatarShown" :avatar="avatar" @change="onAvatarChange" />
+          <GuestBookPage v-else-if="!islandOpening && !islandClosing && !pageTurning" side="left" :autofocus="!touch" />
         </Transition>
       </template>
       <template #right>
         <Transition name="dw-bookpage-fade">
           <GuestBookPage
-            v-if="!islandShown && !islandOpening && !islandClosing"
+            v-if="!memberPage && !islandOpening && !islandClosing && !pageTurning"
             :side="standLayout.left ? 'right' : 'single'"
             :autofocus="!touch && !standLayout.left"
           />
@@ -543,17 +650,22 @@ onBeforeUnmount(() => {
       </template>
     </GuestBook>
     <IslandToolbar
-      v-if="islandShown && standLayout"
+      v-if="(memberPage || pageTurning) && standLayout"
+      :page="bookPage"
+      :busy="pageTurning"
       :mode="islandMode"
       :selected="islandSelected"
-      :status="saveStatus"
-      :problem="islandProblem"
+      :status="pageStatus"
+      :problem="bookPage === 'island' ? islandProblem : ''"
       :touch="touch"
+      @page="switchPage"
       @mode="setIslandMode"
       @rotate="rotateIsland"
-      @reset="resetIsland"
+      @reset="resetPage"
       @sign-out="signOutFromIsland"
-    />
+    >
+      <AvatarEditor v-if="avatarShown && !standLayout.left" compact :avatar="avatar" @change="onAvatarChange" />
+    </IslandToolbar>
 
     <ReadingHud
       v-if="reading"

@@ -80,6 +80,7 @@ function digital_world_render_island_page() {
 		'objects' => digital_world_get_objects(),
 		'radius'  => digital_world_island_radius(),
 		'layout'  => (object) digital_world_user_layout( $user->ID ),
+		'avatar'  => digital_world_user_avatar( $user->ID ),
 	);
 	?>
 	<div class="wrap dw-editor-wrap">
@@ -93,12 +94,16 @@ function digital_world_render_island_page() {
 		</p>
 		<div class="dwe-stage-wrap dw-island-preview">
 			<div id="digital-world-island" class="dwe-stage"></div>
+			<figure class="dw-avatar-preview">
+				<div id="digital-world-avatar" class="dw-avatar-preview__stage"></div>
+				<figcaption><?php echo esc_html( (array) digital_world_user_avatar( $user->ID ) ? 'Персонаж' : 'Персонаж (стандартний)' ); ?></figcaption>
+			</figure>
 		</div>
 		<?php if ( ! isset( digital_world_manifest()[ DIGITAL_WORLD_ISLAND_ENTRY ] ) ) : ?>
 			<div class="notice notice-error"><p>Превʼю не зібрано. Виконайте <code>npm run build</code> у <code>wp-content/plugins/digital-world/frontend</code>.</p></div>
 		<?php endif; ?>
 	</div>
-	<style>.dw-island-preview{height:min(72vh,760px);margin-top:12px}</style>
+	<style>.dw-island-preview{position:relative;height:min(72vh,760px);margin-top:12px}.dw-avatar-preview{position:absolute;top:12px;right:12px;z-index:2;width:160px;margin:0;padding:8px 8px 10px;border-radius:12px;background:rgba(255,255,255,.88);box-shadow:0 6px 20px rgba(0,0,0,.18);text-align:center;font-weight:600}.dw-avatar-preview__stage{height:200px}</style>
 	<script>window.DigitalWorldIsland = <?php echo wp_json_encode( $boot, JSON_HEX_TAG | JSON_HEX_AMP ); ?>;</script>
 	<?php
 }
