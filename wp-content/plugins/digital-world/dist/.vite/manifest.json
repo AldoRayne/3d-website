@@ -13,8 +13,8 @@
     "file": "assets/buildings-Cn1pCzGo.js",
     "name": "buildings"
   },
-  "_dom-Cyao13TS.js": {
-    "file": "assets/dom-Cyao13TS.js",
+  "_dom-BeNYw5JU.js": {
+    "file": "assets/dom-BeNYw5JU.js",
     "name": "dom"
   },
   "_editor-CvhDRI7c.js": {
@@ -49,12 +49,12 @@
     "isDynamicEntry": true
   },
   "src/admin.ts": {
-    "file": "assets/admin-D-DGVyba.js",
+    "file": "assets/admin-DhCJBIYr.js",
     "name": "admin",
     "src": "src/admin.ts",
     "isEntry": true,
     "imports": [
-      "_dom-Cyao13TS.js",
+      "_dom-BeNYw5JU.js",
       "_buildings-Cn1pCzGo.js",
       "_preview-CDxcuptg.js",
       "_WorldModel-DquwbqXN.js",
@@ -98,18 +98,18 @@
     ]
   },
   "src/main.ts": {
-    "file": "assets/main-DDDkxosl.js",
+    "file": "assets/main-CQj4Rhiq.js",
     "name": "main",
     "src": "src/main.ts",
     "isEntry": true,
     "imports": [
-      "_dom-Cyao13TS.js",
+      "_dom-BeNYw5JU.js",
       "_WorldModel-DquwbqXN.js",
       "_buildings-Cn1pCzGo.js",
       "_layout-CJu1c8NR.js"
     ],
     "css": [
-      "assets/main-DCrm2bVd.css"
+      "assets/main-DDtztXT7.css"
     ],
     "assets": [
       "assets/manrope-300-DNp6adrr.json",
