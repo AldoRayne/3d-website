@@ -1,0 +1,11 @@
+{
+  "skin": ["#efc29a", "#f7d8bd", "#dca67c", "#b97d55", "#8d5a3b", "#5e3a26"],
+  "face": ["calm", "smile", "freckles", "beard"],
+  "hair": ["#3a2618", "#1c1816", "#7a4a26", "#c58a45", "#e6c87e", "#a8462b", "#b9b4ad", "#5b6fa8"],
+  "hairStyle": ["short", "long", "bun", "buzz"],
+  "jacket": ["#e07a3c", "#d24a46", "#e8b93a", "#4f9a5a", "#3c8fd6", "#5b4fc4", "#c25a9b", "#2f3a4a", "#ece6d8", "#8a5a3c"],
+  "pants": ["#6d6a3e", "#2f3f5e", "#3b3a3a", "#7a5634", "#a9a39a", "#4a6a8a", "#5a3d5c", "#2e5a43"],
+  "pack": ["#4f6b4a", "#8a5a3c", "#3c6fa8", "#c24a3a", "#e1b23a", "#3b3a3a", "none"],
+  "hat": ["none", "cap", "beanie"],
+  "glasses": ["none", "round", "shades"]
+}

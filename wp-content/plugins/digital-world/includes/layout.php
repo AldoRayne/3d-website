@@ -90,6 +90,7 @@ function digital_world_visit_boot() {
 		'id'        => $user->ID,
 		'name'      => $user->display_name,
 		'layout'    => (object) digital_world_user_layout( $user->ID ),
+		'avatar'    => digital_world_user_avatar( $user->ID ),
 		'returnUrl' => digital_world_island_preview_url( $user->ID ),
 	);
 }

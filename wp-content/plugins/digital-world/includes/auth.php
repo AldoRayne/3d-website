@@ -91,6 +91,7 @@ function digital_world_member_payload( $user = null ) {
 		'name'     => $user->display_name,
 		'canAdmin' => user_can( $user, DIGITAL_WORLD_BOOK_LOGIN_LIMIT ),
 		'layout'   => (object) digital_world_user_layout( $user->ID ),
+		'avatar'   => digital_world_user_avatar( $user->ID ),
 	);
 }
 
