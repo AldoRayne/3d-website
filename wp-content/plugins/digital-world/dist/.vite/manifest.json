@@ -1,6 +1,6 @@
 {
-  "_WorldModel-BvXwdVf8.js": {
-    "file": "assets/WorldModel-BvXwdVf8.js",
+  "_WorldModel-DquwbqXN.js": {
+    "file": "assets/WorldModel-DquwbqXN.js",
     "name": "WorldModel",
     "imports": [
       "_buildings-Cn1pCzGo.js"
@@ -17,25 +17,25 @@
     "file": "assets/dom-Cyao13TS.js",
     "name": "dom"
   },
-  "_editor-DQnJkZiG.css": {
-    "file": "assets/editor-DQnJkZiG.css",
-    "src": "_editor-DQnJkZiG.css"
-  },
-  "_editor-Kti59DXY.js": {
-    "file": "assets/editor-Kti59DXY.js",
+  "_editor-CvhDRI7c.js": {
+    "file": "assets/editor-CvhDRI7c.js",
     "name": "editor",
     "imports": [
-      "_WorldModel-BvXwdVf8.js"
+      "_WorldModel-DquwbqXN.js"
     ],
     "css": [
       "assets/editor-DQnJkZiG.css"
     ]
   },
-  "_layout-BTPIy6WZ.js": {
-    "file": "assets/layout-BTPIy6WZ.js",
+  "_editor-DQnJkZiG.css": {
+    "file": "assets/editor-DQnJkZiG.css",
+    "src": "_editor-DQnJkZiG.css"
+  },
+  "_layout-CJu1c8NR.js": {
+    "file": "assets/layout-CJu1c8NR.js",
     "name": "layout",
     "imports": [
-      "_WorldModel-BvXwdVf8.js"
+      "_WorldModel-DquwbqXN.js"
     ]
   },
   "_preview-CDxcuptg.js": {
@@ -49,7 +49,7 @@
     "isDynamicEntry": true
   },
   "src/admin.ts": {
-    "file": "assets/admin-CpWU1Db2.js",
+    "file": "assets/admin-D-DGVyba.js",
     "name": "admin",
     "src": "src/admin.ts",
     "isEntry": true,
@@ -57,8 +57,8 @@
       "_dom-Cyao13TS.js",
       "_buildings-Cn1pCzGo.js",
       "_preview-CDxcuptg.js",
-      "_WorldModel-BvXwdVf8.js",
-      "_editor-Kti59DXY.js"
+      "_WorldModel-DquwbqXN.js",
+      "_editor-CvhDRI7c.js"
     ]
   },
   "src/assets/fonts/manrope-300.json": {
@@ -87,28 +87,29 @@
     ]
   },
   "src/island-preview.ts": {
-    "file": "assets/island-CDC2a_wp.js",
+    "file": "assets/island-DDortBg2.js",
     "name": "island",
     "src": "src/island-preview.ts",
     "isEntry": true,
     "imports": [
-      "_layout-BTPIy6WZ.js",
-      "_editor-Kti59DXY.js"
+      "_layout-CJu1c8NR.js",
+      "_editor-CvhDRI7c.js",
+      "_WorldModel-DquwbqXN.js"
     ]
   },
   "src/main.ts": {
-    "file": "assets/main-2qI-7j-3.js",
+    "file": "assets/main-DDDkxosl.js",
     "name": "main",
     "src": "src/main.ts",
     "isEntry": true,
     "imports": [
       "_dom-Cyao13TS.js",
-      "_WorldModel-BvXwdVf8.js",
+      "_WorldModel-DquwbqXN.js",
       "_buildings-Cn1pCzGo.js",
-      "_layout-BTPIy6WZ.js"
+      "_layout-CJu1c8NR.js"
     ],
     "css": [
-      "assets/main-ClOuHNNa.css"
+      "assets/main-DCrm2bVd.css"
     ],
     "assets": [
       "assets/manrope-300-DNp6adrr.json",
