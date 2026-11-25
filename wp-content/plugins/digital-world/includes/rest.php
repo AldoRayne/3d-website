@@ -54,6 +54,10 @@ function digital_world_register_routes() {
 						),
 					),
 				),
+				'context' => array(
+					'type'    => 'object',
+					'default' => array(),
+				),
 			),
 		)
 	);
@@ -174,8 +178,9 @@ function digital_world_rest_navigate( WP_REST_Request $request ) {
 
 	$message = trim( (string) $request->get_param( 'message' ) );
 	$history = digital_world_sanitize_history( $request->get_param( 'history' ) );
+	$context = $request->get_param( 'context' );
 
-	return rest_ensure_response( digital_world_navigate( $message, $history ) );
+	return rest_ensure_response( digital_world_navigate( $message, $history, is_array( $context ) ? $context : array() ) );
 }
 
 function digital_world_rest_can_edit() {
