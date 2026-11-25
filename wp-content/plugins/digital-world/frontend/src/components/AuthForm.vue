@@ -209,7 +209,7 @@ async function submit() {
     </div>
 
     <label v-if="isRegister" class="dw-auth__check">
-      <input v-model="form.consent" type="checkbox" :aria-invalid="!!errors.consent" />
+      <input :id="id('consent')" v-model="form.consent" type="checkbox" :aria-invalid="!!errors.consent" />
       <span>
         Погоджуюсь з
         <a v-if="authConfig.privacyUrl" :href="authConfig.privacyUrl" target="_blank" rel="noopener">умовами обробки даних</a>
@@ -219,7 +219,7 @@ async function submit() {
     <p v-if="errors.consent" class="dw-auth__error">{{ errors.consent }}</p>
 
     <label class="dw-auth__check">
-      <input v-model="form.remember" type="checkbox" />
+      <input :id="id('remember')" v-model="form.remember" type="checkbox" />
       <span>Запамʼятати мене</span>
     </label>
 
