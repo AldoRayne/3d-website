@@ -119,6 +119,9 @@ const synth = 'speechSynthesis' in window ? window.speechSynthesis : null
 let voice: SpeechSynthesisVoice | null = null
 let utterance: SpeechSynthesisUtterance | null = null
 
+const VOLUME_KEY = 'dw-navigator-volume'
+let volume = readVolume()
+
 export const canSpeak = ref(false)
 export const speaking = ref(false)
 
@@ -133,6 +136,23 @@ if (synth) {
   synth.addEventListener('voiceschanged', pickVoice)
 }
 
+function readVolume() {
+  try {
+    const stored = Number(localStorage.getItem(VOLUME_KEY))
+    return stored >= 0.25 && stored <= 1 ? stored : 1
+  } catch {
+    return 1
+  }
+}
+
+export function changeVolume(delta: number) {
+  volume = Math.min(1, Math.max(0.25, Math.round((volume + delta) * 100) / 100))
+  try {
+    localStorage.setItem(VOLUME_KEY, String(volume))
+  } catch {}
+  return volume
+}
+
 export function speak(text: string) {
   if (!synth || !voice) {
     return
@@ -141,6 +161,7 @@ export function speak(text: string) {
   utterance = new SpeechSynthesisUtterance(text)
   utterance.voice = voice
   utterance.lang = voice.lang
+  utterance.volume = volume
   const current = utterance
   current.onend = current.onerror = () => {
     if (utterance === current) {

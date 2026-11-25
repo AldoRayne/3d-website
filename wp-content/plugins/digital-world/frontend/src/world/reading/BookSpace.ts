@@ -213,6 +213,31 @@ export class BookSpace {
     return true
   }
 
+  text(scope: 'screen' | 'rest', limit: number) {
+    const sculpture = this.sculpture
+    if (!sculpture) {
+      return ''
+    }
+    const center = this.options.camera.position.y
+    const top = center + sculpture.viewHeight * 0.55
+    const bottom = center - sculpture.viewHeight * 0.5
+    let text = ''
+    for (const block of sculpture.paragraphs) {
+      if (block.y > top || (scope === 'screen' && block.y < bottom)) {
+        continue
+      }
+      if (text.length + block.text.length > limit) {
+        if (!text) {
+          const cut = block.text.slice(0, limit)
+          text = cut.slice(0, Math.max(cut.lastIndexOf('. ') + 1, cut.lastIndexOf(' '))) || cut
+        }
+        break
+      }
+      text += `${text ? '\n' : ''}${block.text}`
+    }
+    return text
+  }
+
   readStep(direction: 1 | -1) {
     const sculpture = this.sculpture
     if (!sculpture) {

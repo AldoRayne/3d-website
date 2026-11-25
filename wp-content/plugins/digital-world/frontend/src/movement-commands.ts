@@ -1,4 +1,4 @@
-import { fail, NUMBER, type Availability, type Failure, type LocalCommand } from '@/commands'
+import { fail, NUMBER, type Availability, type Failure, type LocalCommand, type Phrase } from '@/commands'
 import { MAX_DISTANCE, MIN_DISTANCE, type WorldScene } from '@/world/WorldScene'
 import type { NavigatorContext } from '@/types'
 
@@ -15,6 +15,29 @@ const LOOK: Record<string, [yaw: number, pitch: number, reply: string]> = {
   up: [0, -0.3, 'Дивлюся вгору.'],
   down: [0, 0.85, 'Дивлюся вниз.'],
   ahead: [0, 0, 'Дивлюся вперед.'],
+}
+
+const TURN_VERBS = ['', 'поверни ', 'повернись ', 'повернися ', 'розвернись ', 'розвернися ']
+const LEFT_WORDS = ['ліворуч', 'наліво', 'вліво']
+const RIGHT_WORDS = ['праворуч', 'направо', 'вправо']
+const LOOK_VERBS = ['подивись', 'подивися', 'глянь', 'дивись', 'поглянь']
+const LOOK_WORDS: Record<string, string[]> = {
+  left: ['ліворуч', 'наліво', 'вліво'],
+  right: ['праворуч', 'направо', 'вправо'],
+  back: ['назад', 'позаду'],
+  up: ['вгору', 'угору', 'вверх', 'наверх', 'нагору', 'на небо'],
+  down: ['вниз', 'донизу', 'під ноги', 'додолу'],
+  ahead: ['вперед', 'прямо'],
+}
+
+function turnPhrases(words: string[]): string[] {
+  return TURN_VERBS.flatMap((verb) =>
+    words.flatMap((word) => [`${verb}${word} на ${NUMBER}`, `${verb}${word} ${NUMBER}`, `${verb}на ${NUMBER} ${word}`, `${verb}${NUMBER} ${word}`]),
+  )
+}
+
+function lookPhrases(): Phrase[] {
+  return Object.entries(LOOK_WORDS).flatMap(([value, words]) => LOOK_VERBS.flatMap((verb) => words.map((word): Phrase => [`${verb} ${word}`, value])))
 }
 
 function inWorld(context: NavigatorContext): Availability {
@@ -64,6 +87,17 @@ export function movementCommands(scene: () => WorldScene | null, overview: () =>
         `іди вперед на ${NUMBER}`,
         `пройди ${NUMBER}`,
         `пройди вперед на ${NUMBER}`,
+        `вперед ${NUMBER}`,
+        `йди вперед ${NUMBER}`,
+        `іди вперед ${NUMBER}`,
+        `пройди вперед ${NUMBER}`,
+        `пройди ${NUMBER} вперед`,
+        `йди ${NUMBER}`,
+        `іди ${NUMBER}`,
+        `йди на ${NUMBER}`,
+        `іди на ${NUMBER}`,
+        `зроби ${NUMBER}`,
+        `зроби ${NUMBER} вперед`,
         'вперед',
         'йди вперед',
         'іди вперед',
@@ -94,32 +128,40 @@ export function movementCommands(scene: () => WorldScene | null, overview: () =>
     command({
       id: 'step_forward',
       describe: 'Take one short step forward.',
-      phrases: ['крок вперед', 'трохи вперед', 'ще трохи вперед', 'ще крок', 'ще трохи', 'пройди трохи вперед', 'пройди трохи', 'трішки вперед', 'трошки вперед', 'зроби крок', 'зроби крок вперед'],
+      phrases: ['крок вперед', 'крок', 'ще 1', 'зроби 1', 'трохи вперед', 'ще трохи вперед', 'ще крок', 'пройди трохи вперед', 'пройди трохи', 'трішки вперед', 'трошки вперед', 'зроби крок', 'зроби крок вперед'],
       run: () => moving(1, SHORT_STEP, 'Крок вперед.'),
     }),
     command({
       id: 'walk_back',
       describe: 'Walk backward. amount = number of steps; 0 keeps walking back until stop.',
-      phrases: [`назад на ${NUMBER}`, `${NUMBER} назад`, `на ${NUMBER} назад`, `відійди на ${NUMBER}`, `відійди назад на ${NUMBER}`, 'йди назад', 'іди назад', 'рухайся назад', 'задній хід'],
+      phrases: [
+        `назад на ${NUMBER}`,
+        `назад ${NUMBER}`,
+        `${NUMBER} назад`,
+        `на ${NUMBER} назад`,
+        `йди назад ${NUMBER}`,
+        `іди назад ${NUMBER}`,
+        `йди назад на ${NUMBER}`,
+        `іди назад на ${NUMBER}`,
+        `відійди ${NUMBER}`,
+        `відійди на ${NUMBER}`,
+        `відійди назад ${NUMBER}`,
+        `відійди назад на ${NUMBER}`,
+        `зроби ${NUMBER} назад`, 'йди назад', 'іди назад', 'рухайся назад', 'задній хід'],
       run: (_, { amount }) =>
         amount ? moving(-1, steps(amount), 'Відходжу назад.') : moving(-1, null, 'Іду назад. Скажіть «стоп», щоб зупинитися.'),
     }),
     command({
       id: 'step_back',
       describe: 'Take one short step backward.',
-      phrases: ['назад', 'крок назад', 'трохи назад', 'відійди', 'відійди назад', 'відступи', 'відступи назад', 'back'],
+      phrases: ['назад', 'крок назад', 'трохи назад', 'відійди', 'відійди назад', 'відступи', 'відступи назад', 'відійди трохи', 'трохи відійди', 'ще трохи назад', 'back'],
       run: () => moving(-1, SHORT_STEP, 'Крок назад.'),
     }),
     command({
       id: 'turn_left',
       describe: 'Turn the character left. amount = degrees, 0 means 90.',
       phrases: [
-        `ліворуч на ${NUMBER}`,
-        `наліво на ${NUMBER}`,
-        `вліво на ${NUMBER}`,
-        `поверни ліворуч на ${NUMBER}`,
-        `повернись ліворуч на ${NUMBER}`,
-        `поверни наліво на ${NUMBER}`,
+        ...turnPhrases(LEFT_WORDS),
         'ліворуч',
         'наліво',
         'вліво',
@@ -137,7 +179,7 @@ export function movementCommands(scene: () => WorldScene | null, overview: () =>
     command({
       id: 'nudge_left',
       describe: 'Turn slightly left (30 degrees).',
-      phrases: ['трохи ліворуч', 'трохи наліво', 'трохи вліво', 'лівіше', 'трохи лівіше', 'ще лівіше'],
+      phrases: ['трохи ліворуч', 'трохи наліво', 'трохи вліво', 'лівіше', 'трохи лівіше', 'ще лівіше', 'ще трохи ліворуч', 'ще трохи наліво', 'ще трохи вліво'],
       run: () => turning(NUDGE, 'Трохи ліворуч.'),
     }),
     command({
@@ -148,12 +190,8 @@ export function movementCommands(scene: () => WorldScene | null, overview: () =>
         `повернись на ${NUMBER}`,
         `повернися на ${NUMBER}`,
         `розвернись на ${NUMBER}`,
-        `праворуч на ${NUMBER}`,
-        `направо на ${NUMBER}`,
-        `вправо на ${NUMBER}`,
-        `поверни праворуч на ${NUMBER}`,
-        `повернись праворуч на ${NUMBER}`,
-        `поверни направо на ${NUMBER}`,
+        `розвернися на ${NUMBER}`,
+        ...turnPhrases(RIGHT_WORDS),
         'праворуч',
         'направо',
         'вправо',
@@ -171,26 +209,26 @@ export function movementCommands(scene: () => WorldScene | null, overview: () =>
     command({
       id: 'nudge_right',
       describe: 'Turn slightly right (30 degrees).',
-      phrases: ['трохи праворуч', 'трохи направо', 'трохи вправо', 'правіше', 'трохи правіше', 'ще правіше'],
+      phrases: ['трохи праворуч', 'трохи направо', 'трохи вправо', 'правіше', 'трохи правіше', 'ще правіше', 'ще трохи праворуч', 'ще трохи направо', 'ще трохи вправо'],
       run: () => turning(-NUDGE, 'Трохи праворуч.'),
     }),
     command({
       id: 'turn_around',
       describe: 'Turn the character around by 180 degrees.',
-      phrases: ['розвернись', 'розвернися', 'кругом', 'обернись', 'обернися', 'повернись', 'повернися', 'повернись кругом', 'повернись назад', 'розвернись на місці', 'розвернись назад', 'turn around'],
+      phrases: ['розвернись', 'розвернися', 'кругом', 'обернись', 'обернися', 'повернись', 'повернися', 'повернись кругом', 'повернись назад', 'розвернись на місці', 'розвернися на місці', 'розвернись назад', 'розвернися назад', 'обернись назад', 'обернися назад', 'поверни назад', 'півоберта', 'на півоберта', 'turn around'],
       run: () => turning(Math.PI, 'Розвертаюся.'),
     }),
     command({
       id: 'zoom_in',
       describe: 'Move the camera closer to the character.',
-      phrases: ['ближче', 'наблизь', 'наблизити', 'приблизь', 'приблизити', 'наблизь камеру', 'приблизь камеру', 'камеру ближче', 'збільш', 'zoom in'],
+      phrases: ['ближче', 'ще ближче', 'трохи ближче', 'наблизь', 'наблизь ще', 'ще наблизь', 'наблизити', 'приблизь', 'приблизити', 'наблизь камеру', 'приблизь камеру', 'камеру ближче', 'збільш', 'zoom in'],
       hint: '«ближче»',
       run: () => zooming(scene()?.zoom(-ZOOM_STEP), MIN_DISTANCE, 'Ближче вже нікуди.', 'Наближаю.'),
     }),
     command({
       id: 'zoom_out',
       describe: 'Move the camera farther from the character.',
-      phrases: ['віддали', 'віддалити', 'віддали камеру', 'відсунь камеру', 'камеру далі', 'зменш', 'zoom out'],
+      phrases: ['віддали', 'віддали ще', 'ще віддали', 'ще далі', 'далі камеру', 'віддалити', 'віддали камеру', 'відсунь камеру', 'камеру далі', 'зменш', 'zoom out'],
       hint: '«віддали»',
       run: () => zooming(scene()?.zoom(ZOOM_STEP), MAX_DISTANCE, 'Далі вже нікуди.', 'Віддаляю.'),
     }),
@@ -211,31 +249,8 @@ export function movementCommands(scene: () => WorldScene | null, overview: () =>
       describe: 'Point the camera without moving the character. value = left, right, back, up, down or ahead.',
       values: () => Object.keys(LOOK),
       phrases: [
-        ['подивись ліворуч', 'left'],
-        ['подивись наліво', 'left'],
-        ['подивись вліво', 'left'],
-        ['глянь ліворуч', 'left'],
-        ['глянь наліво', 'left'],
-        ['подивись праворуч', 'right'],
-        ['подивись направо', 'right'],
-        ['подивись вправо', 'right'],
-        ['глянь праворуч', 'right'],
-        ['глянь направо', 'right'],
-        ['подивись назад', 'back'],
-        ['глянь назад', 'back'],
+        ...lookPhrases(),
         ['що позаду', 'back'],
-        ['подивись позаду', 'back'],
-        ['подивись вгору', 'up'],
-        ['подивись угору', 'up'],
-        ['подивись на небо', 'up'],
-        ['глянь вгору', 'up'],
-        ['подивись вниз', 'down'],
-        ['подивись донизу', 'down'],
-        ['подивись під ноги', 'down'],
-        ['глянь вниз', 'down'],
-        ['подивись вперед', 'ahead'],
-        ['подивись прямо', 'ahead'],
-        ['глянь вперед', 'ahead'],
       ],
       run: (_, { value }) => {
         const look = LOOK[value ?? '']

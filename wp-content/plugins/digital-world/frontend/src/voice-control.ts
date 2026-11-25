@@ -1,5 +1,5 @@
 import { computed, ref, watch } from 'vue'
-import { canListen, listen, speak, speaking, stopSpeaking, type ListenError } from '@/voice'
+import { canListen, canSpeak, listen, speak, speaking, stopSpeaking, type ListenError } from '@/voice'
 import type { Reply } from '@/types'
 
 export { canListen }
@@ -32,7 +32,7 @@ export const voiceStatus = computed(() => {
     return 'Озвучую відповідь. Esc — зупинити.'
   }
   if (voiceBusy.value) {
-    return listening.value ? 'Думаю… Можна сказати іншу команду.' : 'Виконую…'
+    return listening.value ? 'Виконую… Можна сказати «стоп».' : 'Виконую…'
   }
   if (voiceMode.value) {
     return 'Слухаю. Натисніть мікрофон, щоб вимкнути.'
@@ -41,7 +41,6 @@ export const voiceStatus = computed(() => {
 })
 
 let handler: PhraseHandler | null = null
-let interrupt: (() => void) | null = null
 let current: Promise<void> | null = null
 let spokenText = ''
 let spokenEndedAt = 0
@@ -69,7 +68,7 @@ watch([voiceBusy, speaking], ([, nowSpeaking], [, wasSpeaking]) => {
   if (wasSpeaking && !nowSpeaking) {
     spokenEndedAt = performance.now()
   }
-  if (voiceBusy.value || speaking.value) {
+  if (speaking.value) {
     return
   }
   window.clearTimeout(restartTimer)
@@ -106,26 +105,22 @@ export function onPhrase(next: PhraseHandler | null) {
   handler = next
 }
 
-export function setInterrupt(next: (() => void) | null) {
-  interrupt = next
-  if (next) {
-    startCapture()
-  }
-}
-
 async function dispatch(text: string) {
-  const previous = current
-  const job = (async () => {
-    if (previous) {
-      interrupt?.()
-      await previous
-    }
-    await handle(text)
-  })()
+  if (current) {
+    await aside(text)
+    return
+  }
+  const job = handle(text)
   current = job
   await job
-  if (current === job) {
-    current = null
+  current = null
+}
+
+async function aside(text: string) {
+  const reply = handler ? await handler(text) : null
+  heard.value = ''
+  if (reply && voiceReplies.value && !reply.quiet) {
+    say(reply.text)
   }
 }
 
@@ -148,6 +143,15 @@ async function handle(text: string) {
   }
 }
 
+export function readAloud(text: string) {
+  if (!canSpeak.value) {
+    return false
+  }
+  session?.cancel()
+  say(text)
+  return true
+}
+
 export function announce(text: string) {
   if (!voiceMode.value) {
     return
@@ -161,7 +165,7 @@ export function announce(text: string) {
 
 function startCapture() {
   window.clearTimeout(restartTimer)
-  if (!voiceMode.value || session || (voiceBusy.value && !interrupt) || speaking.value) {
+  if (!voiceMode.value || session || speaking.value) {
     return
   }
   session = listen({

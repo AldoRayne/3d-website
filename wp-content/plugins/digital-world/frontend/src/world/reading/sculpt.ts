@@ -7,6 +7,8 @@ const ROOTS = '.wp-site-blocks'
 const SKIP = 'script, style, noscript, template, svg, .screen-reader-text, .skip-link, .dw-enter, #wpadminbar'
 const BUTTONS = '.wp-element-button, .wp-block-button__link, button, input[type="submit"]'
 const SLAB = 0.05
+const TEXT_BLOCKS = 'h1, h2, h3, h4, h5, h6, p, li, blockquote, figcaption, dt, dd, td, th'
+const CHROME = 'header.wp-block-template-part, footer.wp-block-template-part, .site-header, .site-footer, #masthead, #colophon, nav, .wp-block-navigation'
 
 export interface Sculpture {
   group: THREE.Group
@@ -14,6 +16,7 @@ export interface Sculpture {
   links: Array<{ box: THREE.Box3; href: string; text: string }>
   anchors: Map<string, number>
   sections: Array<{ text: string; y: number }>
+  paragraphs: Array<{ text: string; y: number }>
   background: THREE.Color
   viewHeight: number
   title: string
@@ -425,6 +428,20 @@ export async function sculptPage(doc: Document, view: { width: number; height: n
     }
   }
 
+  const paragraphs: Array<{ text: string; y: number }> = []
+  for (const root of roots) {
+    const content = root.querySelector<HTMLElement>('main') ?? root
+    for (const element of content.querySelectorAll<HTMLElement>(TEXT_BLOCKS)) {
+      if (element.closest(SKIP) || element.closest(CHROME) || element.parentElement?.closest(TEXT_BLOCKS)) {
+        continue
+      }
+      const text = (element.textContent ?? '').replace(/\s+/g, ' ').trim()
+      if (text) {
+        paragraphs.push({ text, y: y(element.getBoundingClientRect().top) })
+      }
+    }
+  }
+
   if (bounds.isEmpty()) {
     bounds.set(new THREE.Vector3(-1, -1, 0), new THREE.Vector3(1, 1, 0.1))
   }
@@ -438,6 +455,7 @@ export async function sculptPage(doc: Document, view: { width: number; height: n
     links,
     anchors,
     sections,
+    paragraphs,
     background,
     viewHeight: view.height * UNIT,
     title: (doc.querySelector('main .wp-block-post-title, .wp-block-post-title')?.textContent ?? doc.title).trim(),

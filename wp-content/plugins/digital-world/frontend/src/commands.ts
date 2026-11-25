@@ -43,7 +43,9 @@ export function fail(text: string): Failure {
   return { fail: text }
 }
 
-const FILLERS = /(?<=^|\s)(будь ласка|будьласка|please|ну|а|давай|можеш|можна|мені|мене|будь)(?=\s|$)/gu
+const FILLERS = /(?<=^|\s)(будь ласка|будьласка|please|ну|а|давай|можеш|можна|будь)(?=\s|$)/gu
+const PRONOUNS = /(?<=^|\s)(?<!до\s)(мене|мені)(?=\s|$)/gu
+const REPEATS = /(?<=^|\s)(\S+)(?:\s\1)+(?=\s|$)/gu
 const UNIT_WORDS: Record<string, number> = {
   один: 1,
   одна: 1,
@@ -140,7 +142,9 @@ export function normalizePhrase(text: string) {
     .replace(/[’ʼ`]/g, "'")
     .replace(/[^\p{L}\p{N}'\s]+/gu, ' ')
     .replace(FILLERS, ' ')
+    .replace(PRONOUNS, ' ')
     .replace(/\s+/g, ' ')
+    .replace(REPEATS, '$1')
     .trim()
     .replace(/.+/, wordsToNumbers)
     .replace(UNITS, '$1')
@@ -320,9 +324,26 @@ export function createCommandSet(commands: LocalCommand[]) {
     return last ? execute(last.command, context, last.args) : null
   }
 
+  async function urgent(text: string, context: NavigatorContext): Promise<{ id: string; ok: boolean; reply: Reply } | null> {
+    for (const { command, args } of matches(text, context)) {
+      if (!command.transition || command.available(context) === false) {
+        continue
+      }
+      const result = await execute(command, context, args)
+      if (result) {
+        return { id: command.id, ok: result.ok, reply: { text: result.text, quiet: result.ok ? result.quiet : false } }
+      }
+    }
+    return null
+  }
+
+  function lastId() {
+    return last?.command.id ?? null
+  }
+
   function isTransition(id: string) {
     return Boolean(byId.get(id)?.transition)
   }
 
-  return { match, hints, actions, run, runById, again, isTransition }
+  return { match, hints, actions, run, runById, urgent, again, lastId, isTransition }
 }

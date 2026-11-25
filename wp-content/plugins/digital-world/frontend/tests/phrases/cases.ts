@@ -1,4 +1,4 @@
-export type State = 'world' | 'guest' | 'door' | 'visiting' | 'reading' | 'book' | 'island' | 'avatar'
+export type State = 'world' | 'guest' | 'door' | 'guestDoor' | 'stand' | 'guestStand' | 'visiting' | 'reading' | 'book' | 'island' | 'avatar'
 
 export interface PhraseCase {
   state: State
@@ -8,6 +8,7 @@ export interface PhraseCase {
   amount?: number
   text?: string
   target?: string
+  reply?: string
   before?: string[]
 }
 
@@ -133,4 +134,63 @@ export const CASES: PhraseCase[] = [
   ...many('avatar', 'reset_page', ['скинь персонажа']),
   { state: 'avatar', phrase: 'мій острів', expect: 'book_page', value: 'island' },
   ...many('avatar', 'avatar_set', ['зміни колір шкіри', 'змінити колір шкіри', 'зміни шкіру', 'інший колір шкіри', 'колір шкіри', 'темніша шкіра', 'світліша шкіра', 'зроби шкіру темнішою', 'зроби шкіру світлішою', 'шкіра темніше', 'засмагла шкіра', 'темна шкіра', 'світла шкіра', 'смаглява шкіра', 'середня шкіра', 'зміни колір шкіри на темний', 'зміни колір шкіри на світлий', 'шкіра коричнева', 'зроби персонажа смаглявим', 'засмагни', 'темніший тон шкіри', 'змінити тон шкіри']),
+  ...many('door', 'enter', ['увійди', 'увійти', 'вхід', 'вхід в будинок']),
+  ...many('guestDoor', 'enter', ['увійди', 'вхід']),
+  ...many('stand', 'enter', ['відкрий', 'зайди', 'читати', 'увійди']),
+  ...many('guestStand', 'sign_in', ['увійди', 'вхід']),
+  ...many('guest', 'sign_in', ['увійди', 'увійти']),
+  ...many('world', 'follow', ['до мене', 'камеру до мене']),
+  { state: 'world', phrase: 'до', expect: 'server' },
+  ...many('world', 'stop', ['стоп стоп', 'стоп, стоп', 'Стоп!', 'годі', 'хватить', 'стій стій']),
+  { state: 'world', phrase: 'ще трохи', expect: 'more', reply: 'Крок вперед.' },
+  { state: 'world', phrase: 'ще трохи', expect: 'more', reply: 'Трохи ліворуч.', before: ['трохи ліворуч'] },
+  { state: 'world', phrase: 'ще трохи', expect: 'more', reply: 'Наближаю.', before: ['ближче'] },
+  { state: 'world', phrase: 'ще трохи', expect: 'more', reply: 'Крок вперед.', before: ['ліворуч'] },
+  ...many('world', 'nudge_left', ['ще трохи ліворуч']),
+  { state: 'world', phrase: 'вперед 3', expect: 'walk_forward', amount: 3 },
+  { state: 'world', phrase: 'іди вперед три кроки', expect: 'walk_forward', amount: 3 },
+  { state: 'world', phrase: 'йди вперед 5 кроків', expect: 'walk_forward', amount: 5 },
+  { state: 'world', phrase: 'пройди 3 метри вперед', expect: 'walk_forward', amount: 3 },
+  { state: 'world', phrase: 'зроби 3 кроки', expect: 'walk_forward', amount: 3 },
+  ...many('world', 'step_forward', ['ще один крок', 'крок']),
+  { state: 'world', phrase: 'зроби один крок', expect: 'walk_forward', amount: 1 },
+  { state: 'world', phrase: 'назад 2', expect: 'walk_back', amount: 2 },
+  { state: 'world', phrase: 'відійди на два кроки', expect: 'walk_back', amount: 2 },
+  ...many('world', 'step_back', ['відійди трохи']),
+  { state: 'world', phrase: 'ліворуч 45', expect: 'turn_left', amount: 45 },
+  { state: 'world', phrase: 'наліво 90 градусів', expect: 'turn_left', amount: 90 },
+  { state: 'world', phrase: 'поверни на 45 градусів ліворуч', expect: 'turn_left', amount: 45 },
+  { state: 'world', phrase: 'поверни на 30 градусів праворуч', expect: 'turn_right', amount: 30 },
+  ...many('world', 'turn_around', ['обернись назад', 'поверни назад', 'розвернися назад', 'півоберта']),
+  ...many('world', 'zoom_in', ['ще ближче']),
+  ...many('world', 'zoom_out', ['ще далі', 'віддали ще', 'далі камеру']),
+  { state: 'world', phrase: 'подивись вверх', expect: 'look', value: 'up' },
+  { state: 'world', phrase: 'дивись вгору', expect: 'look', value: 'up' },
+  { state: 'world', phrase: 'подивись наверх', expect: 'look', value: 'up' },
+  { state: 'world', phrase: 'поглянь ліворуч', expect: 'look', value: 'left' },
+  { state: 'world', phrase: 'відкрий острів', expect: 'book_page', value: 'island' },
+  { state: 'world', phrase: 'покажи мій острів', expect: 'book_page', value: 'island' },
+  { state: 'world', phrase: 'редагувати острів', expect: 'book_page', value: 'island' },
+  { state: 'world', phrase: 'відкрий персонажа', expect: 'book_page', value: 'avatar' },
+  { state: 'world', phrase: 'поверни контакти ліворуч', expect: 'island_rotate', value: 'left', text: 'контакти' },
+  { state: 'world', phrase: 'посунь блог на 3 вліво', expect: 'island_move', value: 'left', amount: 3, text: 'блог' },
+  { state: 'world', phrase: 'посунь блог на три клітинки вліво', expect: 'island_move', value: 'left', amount: 3, text: 'блог' },
+  { state: 'island', phrase: 'на 3 вгору', expect: 'island_move', value: 'up', amount: 3 },
+  { state: 'island', phrase: 'посунь на 3 вгору', expect: 'island_move', value: 'up', amount: 3 },
+  { state: 'island', phrase: 'вгору 2', expect: 'island_move', value: 'up', amount: 2 },
+  ...many('world', 'replies_off', ['тихо', 'замовкни', 'вимкни звук']),
+  ...many('world', 'volume_up', ['голосніше']),
+  ...many('world', 'volume_down', ['тихіше']),
+  ...many('reading', 'read_down', ['прокрути ще', 'ще далі']),
+  ...many('reading', 'page_back', ['назад на попередню сторінку']),
+  { state: 'reading', phrase: 'прочитай', expect: 'read_aloud' },
+  { state: 'reading', phrase: 'прочитай вголос', expect: 'read_aloud' },
+  { state: 'reading', phrase: 'прочитай сторінку', expect: 'read_aloud', value: 'rest' },
+  { state: 'reading', phrase: 'ще трохи', expect: 'more', reply: 'Далі.', before: ['далі'] },
+  ...many('avatar', 'avatar_set', ['смаглявий', 'зроби смаглявим', 'зміни зачіску', 'зміни куртку', 'інша куртка', 'наступна куртка', 'зміни колір волосся', 'колір волосся', 'окуляри', 'рюкзак', 'джинси', 'темніше', 'світліше', 'блондин', 'рудий', 'лисий', 'під нуль', 'посміхнись']),
+  ...many('avatar', 'avatar_random', ['випадково', 'випадковий']),
+  { state: 'world', phrase: 'світліше', expect: 'server' },
+  { state: 'world', phrase: 'читай виразно', expect: 'server' },
+  ...many('world', 'server', ['what', 'chat', 'listen to that']),
+  { state: 'island', phrase: 'так', expect: 'confirm', before: ['скинь'] },
 ]

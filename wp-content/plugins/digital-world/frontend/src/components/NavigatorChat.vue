@@ -2,7 +2,7 @@
 import { nextTick, ref, watch } from 'vue'
 import { askNavigator, ApiError } from '@/api'
 import { canSpeak, speaking, stopSpeaking } from '@/voice'
-import { canListen, cancelVoice, heard, listening, setInterrupt, toggleVoice, voiceMode, voiceReplies, voiceStatus } from '@/voice-control'
+import { canListen, cancelVoice, heard, listening, toggleVoice, voiceMode, voiceReplies, voiceStatus } from '@/voice-control'
 import type { AiProvider, ChatTurn, NavigatorCommand, NavigatorContext, Reply } from '@/types'
 
 const props = defineProps<{
@@ -10,13 +10,15 @@ const props = defineProps<{
   context: () => NavigatorContext
   local?: (text: string) => Promise<Reply | null>
   execute?: (command: NavigatorCommand) => Promise<{ ok: boolean; text: string; quiet?: boolean } | null>
+  urgent?: (text: string) => Promise<{ id: string; ok: boolean; reply: Reply } | null>
+  blocked?: () => boolean
 }>()
 
 const PROVIDER_LABELS: Record<AiProvider, string> = { claude: 'Claude', ollama: 'Ollama', openai: 'OpenAI', gemini: 'Gemini' }
 
 interface Message extends ChatTurn {
   id: number
-  source?: 'ai' | 'fallback' | 'local' | 'error'
+  source?: 'ai' | 'fallback' | 'local' | 'error' | 'aside'
 }
 
 const suggestions = [
@@ -39,6 +41,7 @@ const messages = ref<Message[]>([
 const log = ref<HTMLElement | null>(null)
 const input = ref<HTMLInputElement | null>(null)
 let nextId = 1
+let request: AbortController | null = null
 
 watch(heard, (text) => {
   if (voiceMode.value && text) {
@@ -67,7 +70,7 @@ async function scrollDown() {
 function history(): ChatTurn[] {
   return messages.value
     .slice(1)
-    .filter((message) => message.source !== 'error' && message.source !== 'local')
+    .filter((message) => message.source !== 'error' && message.source !== 'local' && message.source !== 'aside')
     .slice(-6)
     .map(({ role, content }) => ({ role, content }))
 }
@@ -77,10 +80,34 @@ function answer(content: string, source: Message['source'], quiet = false): Repl
   return { text: content, quiet }
 }
 
+async function interject(message: string): Promise<Reply> {
+  const transition = !busy.value
+  messages.value.push({ id: nextId++, role: 'user', content: message, source: 'aside' })
+  draft.value = ''
+  void scrollDown()
+  const urgent = await props.urgent?.(message)
+  if (urgent?.id === 'stop' && request) {
+    request.abort()
+    if (!urgent.ok) {
+      return answer('Зупинив.', 'aside', true)
+    }
+  }
+  if (urgent) {
+    return answer(urgent.reply.text, urgent.ok ? 'aside' : 'error', urgent.reply.quiet)
+  }
+  return answer(
+    transition ? 'Зачекайте, ще йде перехід. Можна сказати «швидше» або «стоп».' : 'Ще виконую попередню команду. Зачекайте або скажіть «стоп».',
+    'error',
+  )
+}
+
 async function ask(text = draft.value, spoken = false): Promise<Reply | null> {
   const message = text.trim()
-  if (!message || busy.value) {
+  if (!message) {
     return null
+  }
+  if (busy.value || props.blocked?.()) {
+    return interject(message)
   }
   const previous = history()
   const asked = { id: nextId++, role: 'user' as const, content: message }
@@ -95,12 +122,12 @@ async function ask(text = draft.value, spoken = false): Promise<Reply | null> {
     if (local) {
       return answer(local.text, 'local', local.quiet)
     }
-    setInterrupt(spoken ? () => controller.abort() : null)
+    request = controller
     let response
     try {
       response = await askNavigator(message, previous, props.context(), controller.signal)
     } finally {
-      setInterrupt(null)
+      request = null
     }
     const outcome = await props.execute?.(response.command)
     if (!outcome) {
@@ -173,7 +200,6 @@ defineExpose({ ask, setOpen, lastAnswer })
           maxlength="500"
           autocomplete="off"
           :placeholder="voiceMode ? 'Слухаю…' : 'Куди летимо?'"
-          :disabled="busy"
           :readonly="voiceMode"
         />
         <button
@@ -192,7 +218,7 @@ defineExpose({ ask, setOpen, lastAnswer })
             <path d="M6 11a6 6 0 0 0 12 0M12 17v4M8.5 21h7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
           </svg>
         </button>
-        <button type="submit" :disabled="busy || voiceMode || !draft.trim()" aria-label="Надіслати">↑</button>
+        <button type="submit" :disabled="voiceMode || !draft.trim()" aria-label="Надіслати">↑</button>
       </form>
 
       <div v-if="canListen" class="dw-chat__voice">

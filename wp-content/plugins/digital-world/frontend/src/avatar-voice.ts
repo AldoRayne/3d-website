@@ -7,10 +7,10 @@ interface OptionName {
 }
 
 const PART_STEMS: Record<AvatarKey, string[]> = {
-  skin: ['шкір', 'обличчя колір', 'тон шкір', 'засмаг', 'skin'],
-  face: ['обличч', 'вираз', 'бород', 'усміш', 'веснян', 'face'],
-  hair: ['волос', 'колір волос', 'hair'],
-  hairStyle: ['зачіск', 'зачісц', 'стрижк', 'стрижц', 'гульк', 'гульц', 'пучок', 'їжач', 'hairstyle'],
+  skin: ['шкір', 'обличчя колір', 'тон шкір', 'засмаг', 'смагляв', 'skin'],
+  face: ['обличч', 'бород', 'усміш', 'посміх', 'усміх', 'веснян', 'face'],
+  hair: ['волос', 'колір волос', 'блонд', 'біляв', 'брюнет', 'рудий', 'рудим', 'рудою', 'руда', 'руде', 'hair'],
+  hairStyle: ['зачіск', 'зачісц', 'стрижк', 'стрижц', 'гульк', 'гульц', 'пучок', 'їжач', 'лисий', 'лисим', 'лисою', 'лиса', 'під нуль', 'налисо', 'hairstyle'],
   jacket: ['куртк', 'куртц', 'кофт', 'кофтц', 'светр', 'jacket'],
   pants: ['штан', 'брюк', 'джинс', 'pants'],
   pack: ['рюкзак', 'наплічник', 'backpack'],
@@ -55,18 +55,18 @@ const NAMES: Record<AvatarKey, Record<string, OptionName>> = {
     '#efc29a': option('light', 'світла', ['світл']),
     '#dca67c': option('medium', 'середня', ['середн']),
     '#b97d55': option('tan', 'засмагла', ['засмаг']),
-    '#8d5a3b': option('brown', 'смаглява', ['смаглян', 'смаглява', 'коричнев']),
+    '#8d5a3b': option('brown', 'смаглява', ['смаглян', 'смагляв', 'коричнев']),
     '#5e3a26': option('dark', 'темна', ['найтемніш', 'темн']),
   },
   face: {
     calm: option('calm', 'спокійне', ['спокій', 'звичайн']),
-    smile: option('smile', 'усмішка', ['усміш', 'посміш', 'весел']),
+    smile: option('smile', 'усмішка', ['усміш', 'посміш', 'посміх', 'усміх', 'весел']),
     freckles: option('freckles', 'веснянки', ['веснян', 'ластовин']),
     beard: option('beard', 'борода', ['бород']),
   },
   hair: {
     '#3a2618': option('dark-brown', 'темно-каштанове', ['каштан', 'темно корич']),
-    '#1c1816': option('black', 'чорне', COLOR.black),
+    '#1c1816': option('black', 'чорне', [...COLOR.black, 'брюнет']),
     '#7a4a26': option('brown', 'коричневе', COLOR.brown),
     '#c58a45': option('light-brown', 'русяве', ['рус', 'світло корич']),
     '#e6c87e': option('blond', 'біляве', ['біляв', 'блонд', 'світл', 'жовт']),
@@ -78,7 +78,7 @@ const NAMES: Record<AvatarKey, Record<string, OptionName>> = {
     short: option('short', 'коротка', ['коротк']),
     long: option('long', 'довга', ['довг']),
     bun: option('bun', 'гулька', ['гульк', 'гульц', 'пучок', 'пучк']),
-    buzz: option('buzz', 'їжачок', ['їжач', 'під нуль', 'лис']),
+    buzz: option('buzz', 'їжачок', ['їжач', 'під нуль', 'лисий', 'лисим', 'лисою', 'лиса', 'налисо']),
   },
   jacket: {
     '#e07a3c': option('orange', 'помаранчева', COLOR.orange),
@@ -98,7 +98,7 @@ const NAMES: Record<AvatarKey, Record<string, OptionName>> = {
     '#3b3a3a': option('black', 'чорні', [...COLOR.black, ...COLOR.dark]),
     '#7a5634': option('brown', 'коричневі', COLOR.brown),
     '#a9a39a': option('grey', 'сірі', [...COLOR.grey, ...COLOR.white]),
-    '#4a6a8a': option('blue', 'сині', COLOR.blue),
+    '#4a6a8a': option('blue', 'сині', [...COLOR.blue, 'джинс']),
     '#5a3d5c': option('purple', 'фіолетові', COLOR.purple),
     '#2e5a43': option('green', 'темно-зелені', ['темно зелен', ...COLOR.green]),
   },
@@ -125,6 +125,10 @@ const NAMES: Record<AvatarKey, Record<string, OptionName>> = {
 
 const KEYS = Object.keys(AVATAR_OPTIONS) as AvatarKey[]
 const SKIN_ORDER = Object.keys(NAMES.skin)
+const WEARABLES: AvatarKey[] = ['hat', 'glasses', 'pack']
+const CHANGE = /(?<=^|\s)(зміни|змінити|змінь|поміняй|поміняти|інш\S*|наступн\S*|інакш\S*)(?=\s|$)/u
+const PUT_ON = /(?<=^|\s)(одягни|надінь|додай|хочу|дай)(?=\s|$)/u
+const SHADE = /^(зроби )?(світліш\S*|темніш\S*)$/u
 
 export function avatarCatalog() {
   return KEYS.map((key) => `${key}: ${(AVATAR_OPTIONS[key] as string[]).map((value) => NAMES[key][value]?.id ?? value).join('/')}`).join('; ')
@@ -151,7 +155,8 @@ export function resolveAvatarValue(raw: string): { key: AvatarKey; value: string
 }
 
 function has(phrase: string, stems: string[]) {
-  return stems.some((stem) => phrase.includes(stem))
+  const padded = ` ${phrase}`
+  return stems.some((stem) => padded.includes(` ${stem}`))
 }
 
 function partOf(phrase: string): AvatarKey | null {
@@ -175,9 +180,12 @@ function partOf(phrase: string): AvatarKey | null {
   return null
 }
 
-export function parseAvatarPhrases(phrase: string, current: Avatar) {
+export function parseAvatarPhrases(phrase: string, current: Avatar, avatarPage = false) {
+  if (avatarPage && SHADE.test(phrase)) {
+    phrase = `шкіра ${phrase}`
+  }
   const found = phrase
-    .split(/(?<=^|\s)(?:і|та|й|ще|а також)(?=\s|$)/u)
+    .split(/(?<=^|\s)(?:і|та|й|ще|а також|також)(?=\s|$)/u)
     .map((part) => parseAvatarPhrase(part.trim(), current))
     .filter((item): item is { key: AvatarKey; value: string } => item !== null)
   return found.filter((item, index) => found.findIndex((other) => other.key === item.key) === index)
@@ -200,14 +208,17 @@ export function parseAvatarPhrase(phrase: string, current: Avatar): { key: Avata
   if (found) {
     return { key, value: found }
   }
-  if (key === 'face') {
+  const worn = options.filter((value) => value !== 'none')
+  const changing = CHANGE.test(phrase)
+  if (WEARABLES.includes(key) && !changing && (PUT_ON.test(phrase) || phrase.split(' ').length <= 2)) {
+    return { key, value: current[key] !== 'none' && worn.includes(current[key] as string) ? (current[key] as string) : worn[0] }
+  }
+  if (!changing && !/(?<=^|\s)(колір|кольор\S*|тон)(?=\s|$)/u.test(phrase)) {
     return null
   }
-  if (['hat', 'glasses', 'pack'].includes(key) && /(?<=^|\s)(одягни|надінь|додай|хочу|дай)(?=\s|$)/u.test(phrase)) {
-    const first = options.find((value) => value !== 'none')
-    return first ? { key, value: first } : null
-  }
-  return null
+  const order = key === 'skin' ? SKIN_ORDER : worn
+  const index = order.indexOf(current[key] as string)
+  return { key, value: order[(index + 1) % order.length] }
 }
 
 function clamp(value: number, min: number, max: number) {

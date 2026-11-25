@@ -38,11 +38,18 @@ export interface VoiceDeps {
   go: (slug: string, action: 'navigate' | 'open') => Promise<string | Failure>
   lastReply: () => string | null
   again: (context: NavigatorContext) => Promise<CommandResult | null>
+  lastAction: () => string | null
+  cancel: () => void
+  runById: (id: string, context: NavigatorContext) => Promise<CommandResult | null>
+  readAloud: (text: string) => boolean
+  changeVolume: (delta: number) => number
 }
 
 const CONFIRM_WINDOW = 20000
 const SELECTED_WORDS = new Set(['будинок', 'його', 'цей', 'цей будинок', 'його будинок', 'вибраний', 'вибраний будинок', 'виділений', 'виділений будинок'])
 const ISLAND_STEP = 2
+const SMALL_ACTIONS = new Set(['step_forward', 'step_back', 'nudge_left', 'nudge_right', 'zoom_in', 'zoom_out', 'read_down', 'read_up', 'island_move'])
+const VOLUME_STEP = 0.25
 const DIRECTIONS: Record<string, string[]> = {
   up: ['вгору', 'угору', 'вище', 'нагору'],
   down: ['вниз', 'донизу', 'нижче', 'додолу'],
@@ -138,12 +145,21 @@ export function voiceCommands(deps: VoiceDeps): LocalCommand[] {
   const directionPhrases = (): Phrase[] =>
     Object.entries(DIRECTIONS).flatMap(([direction, words]) =>
       words.flatMap((word): Phrase[] => [
+        [`посунь ${TEXT} на ${NUMBER} ${word}`, direction],
+        [`пересунь ${TEXT} на ${NUMBER} ${word}`, direction],
+        [`посунь ${TEXT} ${word} ${NUMBER}`, direction],
+        [`посунь на ${NUMBER} ${word}`, direction],
+        [`посунь ${word} ${NUMBER}`, direction],
+        [`на ${NUMBER} ${word}`, direction],
+        [`${word} ${NUMBER}`, direction],
+        [`${NUMBER} ${word}`, direction],
         [`посунь ${TEXT} трохи ${word}`, `${direction}:small`],
         [`посунь трохи ${TEXT} ${word}`, `${direction}:small`],
         [`пересунь ${TEXT} трохи ${word}`, `${direction}:small`],
         [`посунь трохи ${word}`, `${direction}:small`],
         [`трохи ${word}`, `${direction}:small`],
         [`посунь ${TEXT} ${word} на ${NUMBER}`, direction],
+        [`пересунь ${TEXT} ${word} на ${NUMBER}`, direction],
         [`посунь ${TEXT} ${word}`, direction],
         [`пересунь ${TEXT} ${word}`, direction],
         [`перенеси ${TEXT} ${word}`, direction],
@@ -292,7 +308,7 @@ export function voiceCommands(deps: VoiceDeps): LocalCommand[] {
     {
       id: 'replies_off',
       describe: 'Stop reading replies aloud.',
-      phrases: ['вимкни озвучку', 'вимкни озвучування', 'не озвучуй', 'без озвучки', 'мовчи', 'не говори вголос'],
+      phrases: ['вимкни озвучку', 'вимкни озвучування', 'не озвучуй', 'без озвучки', 'мовчи', 'помовч', 'замовкни', 'тихо', 'вимкни звук', 'без звуку', 'не говори вголос', 'не розмовляй'],
       available: () => true,
       quiet: true,
       run: () => {
@@ -308,6 +324,29 @@ export function voiceCommands(deps: VoiceDeps): LocalCommand[] {
       run: () => {
         deps.setReplies(true)
         return 'Озвучку увімкнено.'
+      },
+    },
+    {
+      id: 'volume_up',
+      describe: 'Read replies aloud louder.',
+      phrases: ['голосніше', 'гучніше', 'говори голосніше', 'говори гучніше', 'зроби голосніше', 'додай гучності'],
+      available: () => true,
+      run: () => {
+        deps.setReplies(true)
+        const before = deps.changeVolume(0)
+        const volume = deps.changeVolume(VOLUME_STEP)
+        return volume === before ? 'Гучніше вже нікуди.' : `Гучність ${Math.round(volume * 100)}%.`
+      },
+    },
+    {
+      id: 'volume_down',
+      describe: 'Read replies aloud more quietly.',
+      phrases: ['тихіше', 'говори тихіше', 'зроби тихіше', 'зменш гучність', 'трохи тихіше'],
+      available: () => true,
+      run: () => {
+        const before = deps.changeVolume(0)
+        const volume = deps.changeVolume(-VOLUME_STEP)
+        return volume === before ? 'Тихіше вже нікуди. Скажіть «вимкни озвучку», щоб я мовчав.' : `Гучність ${Math.round(volume * 100)}%.`
       },
     },
     {
@@ -334,11 +373,18 @@ export function voiceCommands(deps: VoiceDeps): LocalCommand[] {
     },
     {
       id: 'enter',
-      describe: 'Go inside the building the visitor is standing next to and read its page.',
-      phrases: ['зайди в будинок', 'зайди у будинок', 'зайди до будинку', 'увійди в будинок', 'зайди всередину будинку', 'зайди сюди', 'заходимо всередину', 'зайди', 'зайти', 'увійди всередину', 'заходь', 'заходимо', 'заходь всередину', 'зайди всередину', 'відкрий', 'відкрий сторінку', 'відкрий двері', 'відчини двері', 'читати', 'почитати', 'enter', 'open'],
+      describe: 'Go inside the building the visitor is standing next to and read its page, or open the guest book when standing next to it.',
+      phrases: [['увійди', 'door'], ['увійти', 'door'], ['вхід', 'door'], 'вхід в будинок', 'вхід у будинок', 'зайди в будинок', 'зайди у будинок', 'зайди до будинку', 'увійди в будинок', 'зайди всередину будинку', 'зайди сюди', 'заходимо всередину', 'зайди', 'зайти', 'увійди всередину', 'заходь', 'заходимо', 'заходь всередину', 'зайди всередину', 'відкрий', 'відкрий сторінку', 'відкрий двері', 'відчини двері', 'читати', 'почитати', 'enter', 'open'],
       hint: '«зайди» біля дверей',
-      available: (context) => context.screen === 'world' && context.near !== null && context.near !== STAND_SLUG,
-      run: (context) => {
+      available: (context) => context.screen === 'world' && context.near !== null && !(context.near === STAND_SLUG && context.visiting),
+      run: async (context, { value }) => {
+        if (context.near === STAND_SLUG) {
+          if (value === 'door' && !context.signedIn) {
+            return null
+          }
+          const failure = await deps.ensureBook()
+          return failure ? fail(failure) : 'Книгу відкрито.'
+        }
         const object = building(null, context.near)
         if (!object) {
           return fail('Тут немає дверей.')
@@ -383,7 +429,7 @@ export function voiceCommands(deps: VoiceDeps): LocalCommand[] {
     {
       id: 'read_down',
       describe: 'Inside a page: scroll one screen down.',
-      phrases: ['далі', 'вниз', 'нижче', 'гортай', 'гортай вниз', 'гортай далі', 'прокрути', 'прокрути вниз', 'прокрути далі', 'листай', 'листай далі', 'наступний екран', 'читай далі', 'що далі'],
+      phrases: ['далі', 'ще далі', 'вниз', 'нижче', 'гортай', 'гортай вниз', 'гортай далі', 'гортай ще', 'прокрути', 'прокрути вниз', 'прокрути далі', 'прокрути ще', 'листай', 'листай далі', 'листай ще', 'наступний екран', 'читай далі', 'що далі'],
       hint: '«далі»',
       quiet: true,
       repeatable: true,
@@ -396,7 +442,7 @@ export function voiceCommands(deps: VoiceDeps): LocalCommand[] {
     {
       id: 'read_up',
       describe: 'Inside a page: scroll one screen up.',
-      phrases: ['вгору', 'угору', 'вище', 'гортай вгору', 'гортай назад', 'прокрути вгору', 'прокрути назад', 'листай вгору', 'назад вгору', 'попередній екран'],
+      phrases: ['вгору', 'угору', 'вверх', 'вище', 'гортай вгору', 'гортай назад', 'прокрути вгору', 'прокрути назад', 'листай вгору', 'листай назад', 'назад вгору', 'попередній екран'],
       quiet: true,
       repeatable: true,
       available: reading,
@@ -408,11 +454,43 @@ export function voiceCommands(deps: VoiceDeps): LocalCommand[] {
     {
       id: 'page_back',
       describe: 'Inside a page: go back to the previously read page.',
-      phrases: ['попередня сторінка', 'на попередню сторінку', 'повернись на попередню', 'повернись на попередню сторінку'],
+      phrases: ['попередня сторінка', 'на попередню сторінку', 'на попередню', 'назад на попередню сторінку', 'назад на попередню', 'повернись на попередню', 'повернись на попередню сторінку', 'поверни попередню сторінку'],
       available: reading,
       run: () => {
         window.history.back()
         return 'Повертаюся на попередню сторінку.'
+      },
+    },
+    {
+      id: 'read_aloud',
+      describe: 'Inside a page: read aloud the text on the screen, or value = rest to read from here to the end of the page.',
+      values: () => ['screen', 'rest'],
+      phrases: [
+        'прочитай',
+        'прочитай це',
+        'прочитай текст',
+        'прочитай вголос',
+        'читай вголос',
+        'прочитай що тут',
+        'прочитай що написано',
+        'що тут написано',
+        ['прочитай сторінку', 'rest'],
+        ['прочитай всю сторінку', 'rest'],
+        ['прочитай усе', 'rest'],
+        ['прочитай все', 'rest'],
+        ['прочитай до кінця', 'rest'],
+        ['читай сторінку вголос', 'rest'],
+        ['читай вголос далі', 'rest'],
+        ['прочитай далі', 'rest'],
+      ],
+      quiet: true,
+      available: reading,
+      run: (_, { value }) => {
+        const text = deps.scene()?.readingText(value === 'rest' ? 'rest' : 'screen') ?? ''
+        if (!text) {
+          return fail('Тут немає тексту для читання.')
+        }
+        return deps.readAloud(text) ? 'Читаю вголос. Esc — зупинити.' : text
       },
     },
     {
@@ -653,6 +731,16 @@ export function voiceCommands(deps: VoiceDeps): LocalCommand[] {
         ['до острова', 'island'],
         ['редактор острова', 'island'],
         ['налаштуй острів', 'island'],
+        ['відкрий острів', 'island'],
+        ['відкрий мій острів', 'island'],
+        ['покажи мій острів', 'island'],
+        ['змінити острів', 'island'],
+        ['зміни острів', 'island'],
+        ['редагувати острів', 'island'],
+        ['редагуй острів', 'island'],
+        ['переставити будинки', 'island'],
+        ['перестав будинки', 'island'],
+        ['переставляти будинки', 'island'],
         ['персонаж', 'avatar'],
         ['мій персонаж', 'avatar'],
         ['сторінка персонажа', 'avatar'],
@@ -663,6 +751,11 @@ export function voiceCommands(deps: VoiceDeps): LocalCommand[] {
         ['змінити персонажа', 'avatar'],
         ['зміни персонажа', 'avatar'],
         ['змінити вигляд', 'avatar'],
+        ['відкрий персонажа', 'avatar'],
+        ['покажи персонажа', 'avatar'],
+        ['покажи мого персонажа', 'avatar'],
+        ['редагувати персонажа', 'avatar'],
+        ['редагуй персонажа', 'avatar'],
         ['переверни сторінку', 'toggle'],
         ['перегорни сторінку', 'toggle'],
         ['наступна сторінка', 'toggle'],
@@ -768,6 +861,8 @@ export function voiceCommands(deps: VoiceDeps): LocalCommand[] {
         'крутни',
         'крутни будинок',
         'розверни будинок',
+        ...['ліворуч', 'наліво', 'вліво', 'проти годинникової'].flatMap((word): Phrase[] => [[`поверни ${TEXT} ${word}`, 'left'], [`розверни ${TEXT} ${word}`, 'left']]),
+        ...['праворуч', 'направо', 'вправо', 'за годинниковою'].flatMap((word): Phrase[] => [[`поверни ${TEXT} ${word}`, 'right'], [`розверни ${TEXT} ${word}`, 'right']]),
         `поверни ${TEXT}`,
         `розверни ${TEXT}`,
       ],
@@ -806,8 +901,8 @@ export function voiceCommands(deps: VoiceDeps): LocalCommand[] {
     {
       id: 'avatar_set',
       describe: `Change the character's look; works anywhere for a signed in member. value = one or more part=option joined with ";", e.g. "jacket=red;hat=cap". Parts and options: ${avatarCatalog()}.`,
-      parse: (phrase) => {
-        const found = parseAvatarPhrases(phrase, deps.avatar())
+      parse: (phrase, context) => {
+        const found = parseAvatarPhrases(phrase, deps.avatar(), context.screen === 'book' && context.bookPage === 'avatar')
         return found.length ? { value: found.map((item) => `${item.key}=${item.value}`).join(';') } : null
       },
       available: member,
@@ -823,7 +918,7 @@ export function voiceCommands(deps: VoiceDeps): LocalCommand[] {
     {
       id: 'avatar_random',
       describe: 'Give the character a random look.',
-      phrases: ['випадковий персонаж', 'випадковий вигляд', 'здивуй мене', 'згенеруй персонажа', 'зміни все випадково', 'random'],
+      phrases: ['випадковий персонаж', 'випадкового персонажа', 'випадковий вигляд', 'випадковий', 'випадково', 'зроби випадково', 'здивуй мене', 'згенеруй персонажа', 'зміни все випадково', 'random'],
       available: member,
       run: () => {
         deps.setAvatar(randomAvatar())
@@ -831,14 +926,33 @@ export function voiceCommands(deps: VoiceDeps): LocalCommand[] {
       },
     },
     {
+      id: 'more',
+      describe: 'Do a little more of the last small action (a step, a slight turn, a zoom or a scroll); a short step forward if there was none.',
+      phrases: ['ще трохи', 'ще трошки', 'ще трішки', 'ще чуть чуть'],
+      quiet: true,
+      available: () => true,
+      run: async (context) => {
+        const last = deps.lastAction()
+        const result = last && SMALL_ACTIONS.has(last) ? await deps.again(context) : await deps.runById('step_forward', context)
+        if (!result) {
+          return fail('Немає що повторювати.')
+        }
+        return result.ok ? result.text : fail(result.text)
+      },
+    },
+    {
       id: 'stop',
       describe: 'Stop any walking, turning or camera flight.',
-      phrases: ['стоп', 'стій', 'зупинись', 'зупинися', 'зупинитись', 'досить', 'stop'],
+      phrases: ['стоп', 'стій', 'стояти', 'зупинись', 'зупинися', 'зупинитись', 'зупини', 'зупиняйся', 'зупинка', 'досить', 'годі', 'хватить', 'хватит', 'стій на місці', 'не йди', 'stop'],
       hint: '«стоп»',
       quiet: true,
       transition: true,
-      available: (context) => context.screen === 'world' || context.screen === 'entering' || 'Зараз немає руху, який можна зупинити.',
+      available: (context) => context.screen === 'world' || context.screen === 'entering' || deps.animating() || 'Зараз немає руху, який можна зупинити.',
       run: () => {
+        deps.cancel()
+        if (deps.animating()) {
+          deps.hurry()
+        }
         deps.scene()?.stop()
         return 'Зупинився.'
       },

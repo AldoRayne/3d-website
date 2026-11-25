@@ -19,8 +19,9 @@ import GuestBookPage from '@/components/GuestBookPage.vue'
 import NavigatorChat from '@/components/NavigatorChat.vue'
 import ReadingHud from '@/components/ReadingHud.vue'
 import VoiceDock from '@/components/VoiceDock.vue'
-import { announce, canListen, disposeVoice, isEcho, onPhrase, stopVoice, voiceReplies } from '@/voice-control'
-import { createCommandSet, type CommandResult } from '@/commands'
+import { announce, canListen, disposeVoice, isEcho, onPhrase, readAloud, stopVoice, voiceReplies } from '@/voice-control'
+import { changeVolume } from '@/voice'
+import { bestMatch, createCommandSet, type CommandResult } from '@/commands'
 import { movementCommands } from '@/movement-commands'
 import { voiceCommands } from '@/voice-commands'
 
@@ -491,7 +492,11 @@ async function leaveScreens() {
   }
 }
 
+let stops = 0
+const STOPPED = 'Зупинено.'
+
 async function ensureBook(): Promise<string | null> {
+  const run = stops
   if (visit) {
     return 'У гостьовому перегляді книга недоступна.'
   }
@@ -500,7 +505,10 @@ async function ensureBook(): Promise<string | null> {
   }
   if (!bookOpen.value) {
     if (!atStand.value && !(await walkTo(STAND_SLUG))) {
-      return 'Не вдалося дійти до книги.'
+      return run === stops ? 'Не вдалося дійти до книги.' : STOPPED
+    }
+    if (run !== stops) {
+      return STOPPED
     }
     await openBook()
     if (!bookOpen.value) {
@@ -551,6 +559,11 @@ const commands = createCommandSet([
     hints: (context) => commands.hints(context),
     lastReply: () => chat.value?.lastAnswer() ?? null,
     again: (context) => commands.again(context),
+    lastAction: () => commands.lastId(),
+    cancel: () => stops++,
+    runById: (id, context) => commands.runById(id, context, {}),
+    readAloud,
+    changeVolume,
     go: async (slug, action) => {
       const result = await runCommand({ action, target: slug, camera: { transition: 'fly' } })
       if (!result) {
@@ -586,12 +599,20 @@ function settled(timeout = 15000) {
   })
 }
 
-async function runLocal(text: string) {
-  const command = commands.match(text, navigatorContext.value)
-  if ((entering.value || opening.value) && command && !command.transition) {
-    await settled()
-  }
+function runLocal(text: string) {
   return commands.run(text, navigatorContext.value)
+}
+
+function runUrgent(text: string) {
+  return commands.urgent(text, navigatorContext.value)
+}
+
+function transitionRunning() {
+  return Boolean(entering.value || opening.value)
+}
+
+function namesBuilding(text: string) {
+  return Boolean(bestMatch(text, objects.value, (object) => [object.title, object.page_title, ...object.keywords], 60))
 }
 
 async function runCommand(command: NavigatorCommand): Promise<CommandResult | null> {
@@ -616,17 +637,25 @@ async function runCommand(command: NavigatorCommand): Promise<CommandResult | nu
   if (!target) {
     return null
   }
+  const run = stops
+  const stopped = { ok: false, text: STOPPED }
   if (target === STAND_SLUG) {
     if (action === 'open') {
       const failure = await ensureBook()
       return failure ? { ok: false, text: failure } : { ok: true, text: 'Відкриваю книгу.' }
     }
     await leaveScreens()
+    if (run !== stops) {
+      return stopped
+    }
   }
   const object = bySlug(target)
   const done = { ok: true, text: object ? (action === 'open' ? `Відкриваю «${object.title}».` : `Іду до «${object.title}».`) : 'Іду.' }
   if (action === 'open' && object && !object.url) {
     await leaveScreens()
+    if (run !== stops) {
+      return stopped
+    }
     void walkTo(target, command.camera.transition)
     return { ok: false, text: `«${object.title}» поки зачинена, тож лише відведу до дверей.` }
   }
@@ -635,6 +664,9 @@ async function runCommand(command: NavigatorCommand): Promise<CommandResult | nu
     return done
   }
   await leaveScreens()
+  if (run !== stops) {
+    return stopped
+  }
   const walk = walkTo(target, command.camera.transition) ?? Promise.resolve(false)
   const started = await Promise.race([walk, new Promise<boolean>((resolve) => window.setTimeout(() => resolve(true), 150))])
   if (!started) {
@@ -708,7 +740,7 @@ function onKeydown(event: KeyboardEvent) {
 
 onMounted(async () => {
   onPhrase((text) => {
-    if (isEcho(text) && !commands.match(text, navigatorContext.value)) {
+    if (isEcho(text) && !commands.match(text, navigatorContext.value) && !namesBuilding(text)) {
       return Promise.resolve(null)
     }
     return chat.value?.ask(text, true) ?? Promise.resolve(null)
@@ -816,7 +848,7 @@ onBeforeUnmount(() => {
       </div>
       <DoorCard v-if="zoneObject" :object="zoneObject" :touch="touch" @enter="enter(zoneObject.slug)" />
       <StandCard v-else-if="showStandCard" :touch="touch" :visiting="!!visit" @open="openBook" />
-      <NavigatorChat ref="chat" :provider="aiProvider" :context="contextForNavigator" :local="runLocal" :execute="runCommand" />
+      <NavigatorChat ref="chat" :provider="aiProvider" :context="contextForNavigator" :local="runLocal" :execute="runCommand" :urgent="runUrgent" :blocked="transitionRunning" />
     </div>
 
     <GuestBook v-if="standLayout" :layout="standLayout" :passthrough="memberPage" :print-left="memberPage" @close="closeBook">

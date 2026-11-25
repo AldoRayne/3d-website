@@ -1474,6 +1474,10 @@ export class WorldScene {
     this.space?.readHere()
   }
 
+  readingText(scope: 'screen' | 'rest') {
+    return this.reading ? (this.space?.text(scope, scope === 'rest' ? 4000 : 1200) ?? '') : ''
+  }
+
   readTop() {
     this.space?.flyToTop()
   }
