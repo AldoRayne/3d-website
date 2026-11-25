@@ -2,17 +2,17 @@
 import { nextTick, ref, watch } from 'vue'
 import { askNavigator, ApiError } from '@/api'
 import { canSpeak, speaking, stopSpeaking } from '@/voice'
-import { canListen, cancelVoice, heard, listening, toggleVoice, voiceMode, voiceReplies, voiceStatus } from '@/voice-control'
-import type { AiProvider, ChatTurn, NavigatorCommand, NavigatorContext } from '@/types'
+import { canListen, cancelVoice, heard, listening, setInterrupt, toggleVoice, voiceMode, voiceReplies, voiceStatus } from '@/voice-control'
+import type { AiProvider, ChatTurn, NavigatorCommand, NavigatorContext, Reply } from '@/types'
 
 const props = defineProps<{
   provider: AiProvider | null
-  context: NavigatorContext
-  local?: (text: string) => Promise<string | null>
+  context: () => NavigatorContext
+  local?: (text: string) => Promise<Reply | null>
+  execute?: (command: NavigatorCommand) => Promise<{ ok: boolean; text: string; quiet?: boolean } | null>
 }>()
 
 const PROVIDER_LABELS: Record<AiProvider, string> = { claude: 'Claude', ollama: 'Ollama', openai: 'OpenAI', gemini: 'Gemini' }
-const emit = defineEmits<{ command: [command: NavigatorCommand] }>()
 
 interface Message extends ChatTurn {
   id: number
@@ -72,18 +72,20 @@ function history(): ChatTurn[] {
     .map(({ role, content }) => ({ role, content }))
 }
 
-function answer(content: string, source: Message['source']) {
+function answer(content: string, source: Message['source'], quiet = false): Reply {
   messages.value.push({ id: nextId++, role: 'assistant', content, source })
-  return content
+  return { text: content, quiet }
 }
 
-async function ask(text = draft.value, spoken = false): Promise<string | null> {
+async function ask(text = draft.value, spoken = false): Promise<Reply | null> {
   const message = text.trim()
   if (!message || busy.value) {
     return null
   }
   const previous = history()
-  messages.value.push({ id: nextId++, role: 'user', content: message })
+  const asked = { id: nextId++, role: 'user' as const, content: message }
+  const controller = new AbortController()
+  messages.value.push(asked)
   draft.value = ''
   busy.value = true
   void scrollDown()
@@ -91,12 +93,25 @@ async function ask(text = draft.value, spoken = false): Promise<string | null> {
   try {
     const local = await props.local?.(message)
     if (local) {
-      return answer(local, 'local')
+      return answer(local.text, 'local', local.quiet)
     }
-    const response = await askNavigator(message, previous, props.context)
-    emit('command', response.command)
-    return answer(response.reply, response.source)
+    setInterrupt(spoken ? () => controller.abort() : null)
+    let response
+    try {
+      response = await askNavigator(message, previous, props.context(), controller.signal)
+    } finally {
+      setInterrupt(null)
+    }
+    const outcome = await props.execute?.(response.command)
+    if (!outcome) {
+      return answer(response.reply, response.source)
+    }
+    return outcome.ok ? answer(outcome.text, response.source, outcome.quiet) : answer(outcome.text, 'error')
   } catch (error) {
+    if (controller.signal.aborted) {
+      messages.value = messages.value.filter((item) => item.id !== asked.id)
+      return null
+    }
     return answer(
       error instanceof ApiError && error.status === 429
         ? 'Забагато запитів. Спробуйте за хвилину.'
@@ -112,7 +127,16 @@ async function ask(text = draft.value, spoken = false): Promise<string | null> {
   }
 }
 
-defineExpose({ ask })
+function setOpen(value: boolean) {
+  open.value = value
+}
+
+function lastAnswer() {
+  const message = [...messages.value].reverse().find((item) => item.role === 'assistant' && item.source !== 'error')
+  return message?.content ?? null
+}
+
+defineExpose({ ask, setOpen, lastAnswer })
 </script>
 
 <template>

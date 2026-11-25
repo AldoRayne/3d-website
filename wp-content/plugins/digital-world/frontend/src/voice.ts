@@ -69,15 +69,19 @@ export function listen(handlers: ListenHandlers) {
   recognition.interimResults = true
   recognition.maxAlternatives = 1
   let heard = ''
+  let final = false
   let cancelled = false
   let failed = false
 
   recognition.onresult = (event) => {
     let text = ''
+    let complete = event.results.length > 0
     for (let index = 0; index < event.results.length; index++) {
       text += event.results[index][0].transcript
+      complete &&= event.results[index].isFinal
     }
     heard = text.trim()
+    final = complete
     handlers.interim(heard)
   }
   recognition.onerror = (event) => {
@@ -88,7 +92,7 @@ export function listen(handlers: ListenHandlers) {
     handlers.error(ERRORS[event.error] ?? 'failed')
   }
   recognition.onend = () => {
-    if (!cancelled && !failed && heard) {
+    if (!cancelled && !failed && heard && final) {
       handlers.done(heard)
     } else if (!cancelled && !failed) {
       handlers.error('silence')

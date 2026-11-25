@@ -27,6 +27,25 @@ interface Walk {
   stuck: number
 }
 
+interface Drive {
+  move: -1 | 0 | 1
+  turn: -1 | 0 | 1
+  remaining: number
+  stuck: number
+}
+
+interface Sweep {
+  from: number
+  elapsed: number
+  duration: number
+}
+
+export const MIN_DISTANCE = 4
+export const MAX_DISTANCE = 20
+const DRIVE_LIMIT = 80
+const SPIN_DURATION = 7
+const ORBIT_DURATION = 24
+
 export type EnterResult = 'read' | 'navigate' | false
 
 export interface ScreenRect {
@@ -59,6 +78,7 @@ export interface WorldSceneOptions {
   onIslandProblem?: (problem: PlacementProblem) => void
   onIslandChange?: (placements: Map<string, Placement>) => void
   onLink?: (href: string) => void
+  onBlocked?: () => void
   reducedMotion?: boolean
   avatar?: Avatar
 }
@@ -145,7 +165,11 @@ export class WorldScene {
   private walk: Walk | null = null
   private faceAfterWalk: number | null = null
   private marker: THREE.Mesh
-  private mode: 'chase' | 'overview' | 'cinematic' | 'reading' | 'book' = 'chase'
+  private mode: 'chase' | 'overview' | 'orbit' | 'cinematic' | 'reading' | 'book' = 'chase'
+  private drive: Drive | null = null
+  private spin: Sweep | null = null
+  private orbit: Sweep | null = null
+  private viewHold = false
   private space: BookSpace | null = null
   private reading = false
   private yawOffset = 0
@@ -289,6 +313,7 @@ export class WorldScene {
   private placeAt(point: THREE.Vector3, heading: number) {
     this.player.position.set(point.x, 0, point.z)
     this.player.heading = heading
+    this.clearMotion()
     this.yawOffset = 0
     this.pitchOffset = 0
     this.mode = 'chase'
@@ -356,6 +381,105 @@ export class WorldScene {
   stop() {
     this.cancelWalk()
     this.keys.clear()
+    this.clearMotion()
+    if (this.mode === 'orbit') {
+      this.mode = 'overview'
+    }
+  }
+
+  private clearMotion() {
+    this.drive = null
+    this.spin = null
+    this.orbit = null
+    this.viewHold = false
+  }
+
+  step(direction: 1 | -1, distance: number | null = null) {
+    if (this.locked) {
+      return false
+    }
+    this.cancelWalk()
+    this.orbit = null
+    this.mode = 'chase'
+    this.drive = { move: direction, turn: 0, remaining: distance ?? DRIVE_LIMIT, stuck: 0 }
+    return true
+  }
+
+  turnBy(angle: number) {
+    if (this.locked || !angle) {
+      return false
+    }
+    this.cancelWalk()
+    this.orbit = null
+    this.mode = 'chase'
+    this.drive = { move: 0, turn: angle > 0 ? 1 : -1, remaining: Math.abs(angle), stuck: 0 }
+    return true
+  }
+
+  zoom(delta: number) {
+    return this.setZoom(this.distance + delta)
+  }
+
+  setZoom(distance: number) {
+    if (this.locked) {
+      return null
+    }
+    if (this.mode === 'overview' || this.mode === 'orbit') {
+      this.orbit = null
+      this.mode = 'chase'
+    }
+    this.distance = THREE.MathUtils.clamp(distance, MIN_DISTANCE, MAX_DISTANCE)
+    return this.distance
+  }
+
+  lookToward(yaw: number, pitch: number) {
+    if (this.locked) {
+      return false
+    }
+    this.orbit = null
+    this.spin = null
+    this.mode = 'chase'
+    this.yawOffset = yaw
+    this.pitchOffset = pitch
+    this.viewHold = yaw !== 0 || pitch !== 0
+    return true
+  }
+
+  lookAround() {
+    if (this.locked || this.options.reducedMotion) {
+      return false
+    }
+    this.orbit = null
+    this.mode = 'chase'
+    this.viewHold = false
+    this.spin = { from: this.yawOffset, elapsed: 0, duration: SPIN_DURATION }
+    return true
+  }
+
+  orbitIsland() {
+    if (this.locked || this.options.reducedMotion) {
+      return false
+    }
+    this.cancelWalk()
+    this.drive = null
+    this.spin = null
+    this.orbit = { from: Math.atan2(this.camera.position.x, this.camera.position.z), elapsed: 0, duration: ORBIT_DURATION }
+    this.mode = 'orbit'
+    return true
+  }
+
+  chase() {
+    if (this.locked) {
+      return false
+    }
+    this.orbit = null
+    this.spin = null
+    this.viewHold = false
+    this.mode = 'chase'
+    this.yawOffset = 0
+    this.pitchOffset = 0
+    this.distance = this.defaultDistance
+    return true
   }
 
   walkTo(slug: string, transition: CameraTransition = 'fly'): Promise<boolean> {
@@ -385,6 +509,8 @@ export class WorldScene {
 
   private startWalk(goal: THREE.Vector2, face: number | null = null) {
     this.cancelWalk()
+    this.drive = null
+    this.orbit = null
     const from = new THREE.Vector2(this.player.position.x, this.player.position.z)
     const points = this.model.nav?.findPath(from, goal)
     if (!points?.length) {
@@ -436,6 +562,7 @@ export class WorldScene {
 
   private stepPlayer(dt: number) {
     if (this.locked) {
+      this.drive = null
       return
     }
     const turn = (this.pressed(KEYS.left) ? 1 : 0) - (this.pressed(KEYS.right) ? 1 : 0)
@@ -445,11 +572,29 @@ export class WorldScene {
 
     if (turn || move) {
       this.cancelWalk()
+      this.drive = null
+      this.spin = null
+      this.viewHold = false
       this.mode = 'chase'
       this.player.heading += turn * TURN_SPEED * dt
       if (move) {
         const forward = this.player.forward
         velocity = new THREE.Vector2(forward.x, forward.z).multiplyScalar(move * WALK_SPEED * (move > 0 ? 1 : 0.55))
+      }
+    } else if (this.drive) {
+      const drive = this.drive
+      this.viewHold = false
+      if (drive.turn) {
+        const angle = Math.min(TURN_SPEED * dt, drive.remaining)
+        this.player.heading += drive.turn * angle
+        drive.remaining -= angle
+        if (drive.remaining <= 1e-4) {
+          this.drive = null
+        }
+      } else if (drive.move && dt > 0) {
+        const forward = this.player.forward
+        const speed = Math.min(WALK_SPEED * (drive.move > 0 ? 1 : 0.55), drive.remaining / dt)
+        velocity = new THREE.Vector2(forward.x, forward.z).multiplyScalar(drive.move * speed)
       }
     } else if (this.walk) {
       const toNext = this.walk.points[0].clone().sub(before)
@@ -491,6 +636,17 @@ export class WorldScene {
           this.cancelWalk()
         }
       }
+      const drive = this.drive
+      if (drive?.move) {
+        drive.remaining -= moved
+        drive.stuck = moved < velocity.length() * dt * 0.2 ? drive.stuck + dt : 0
+        if (drive.stuck > 0.4) {
+          this.drive = null
+          this.options.onBlocked?.()
+        } else if (drive.remaining <= 0.01) {
+          this.drive = null
+        }
+      }
     }
   }
 
@@ -509,14 +665,34 @@ export class WorldScene {
       this.camera.lookAt(pose.center)
       return
     }
-    if (!this.drag?.moved) {
+    if (this.spin) {
+      const spin = this.spin
+      spin.elapsed += dt
+      const t = Math.min(1, spin.elapsed / spin.duration)
+      this.yawOffset = spin.from + Math.PI * 2 * (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2)
+      if (t >= 1) {
+        this.yawOffset = spin.from
+        this.spin = null
+      }
+    } else if (!this.drag?.moved && !this.viewHold) {
       const decay = Math.exp(-dt * 3)
       this.yawOffset *= decay
       this.pitchOffset *= decay
     }
     let position: THREE.Vector3
     let target: THREE.Vector3
-    if (this.mode === 'overview') {
+    if (this.mode === 'orbit' && this.orbit) {
+      const orbit = this.orbit
+      orbit.elapsed += dt
+      const radius = this.model.radius
+      const angle = orbit.from + (Math.PI * 2 * Math.min(orbit.elapsed, orbit.duration)) / orbit.duration
+      position = new THREE.Vector3(Math.sin(angle) * radius * 1.35, radius * 0.75, Math.cos(angle) * radius * 1.35)
+      target = new THREE.Vector3(0, 1, 0)
+      if (orbit.elapsed >= orbit.duration) {
+        this.orbit = null
+        this.mode = 'overview'
+      }
+    } else if (this.mode === 'overview') {
       const radius = this.model.radius
       const away = new THREE.Vector3(this.player.position.x, 0, this.player.position.z)
       if (away.lengthSq() < 1) {
@@ -527,7 +703,7 @@ export class WorldScene {
     } else {
       ;({ position, target } = this.chasePose())
     }
-    const k = 1 - Math.exp(-dt * (this.mode === 'overview' ? 2.5 : 9))
+    const k = 1 - Math.exp(-dt * (this.mode === 'overview' || this.mode === 'orbit' ? 2.5 : 9))
     this.camera.position.lerp(position, k)
     this.look.lerp(target, k)
     this.camera.lookAt(this.look)
@@ -855,6 +1031,41 @@ export class WorldScene {
     return true
   }
 
+  get islandSelected() {
+    return this.island?.selected ?? null
+  }
+
+  moveIslandBuilding(direction: 'up' | 'down' | 'left' | 'right', cells: number): { moved: number; problem: PlacementProblem | 'none' } {
+    const island = this.island
+    if (!this.islandReady || !island?.selected) {
+      return { moved: 0, problem: 'none' }
+    }
+    const { origin, x, z } = island.axes
+    const screen = (point: THREE.Vector3) => {
+      const projected = point.clone().project(this.camera)
+      return new THREE.Vector2(projected.x, projected.y)
+    }
+    const center = screen(origin)
+    const wanted = { up: new THREE.Vector2(0, 1), down: new THREE.Vector2(0, -1), left: new THREE.Vector2(-1, 0), right: new THREE.Vector2(1, 0) }[direction]
+    const options = [
+      { dx: 1, dz: 0, along: screen(x).sub(center) },
+      { dx: -1, dz: 0, along: center.clone().sub(screen(x)) },
+      { dx: 0, dz: 1, along: screen(z).sub(center) },
+      { dx: 0, dz: -1, along: center.clone().sub(screen(z)) },
+    ]
+    const best = options.reduce((a, b) => (b.along.normalize().dot(wanted) > a.along.normalize().dot(wanted) ? b : a))
+    let problem: PlacementProblem | 'none' = null
+    for (let step = cells; step >= 1; step--) {
+      const result = island.moveSelected(best.dx * step, best.dz * step)
+      if (!result) {
+        this.options.onIslandChange?.(island.placements)
+        return { moved: step, problem: step === cells ? null : problem }
+      }
+      problem ??= result
+    }
+    return { moved: 0, problem }
+  }
+
   selectIsland(slug: string | null) {
     this.island?.select(slug)
     this.options.onIslandSelect?.(this.island?.selected ?? null)
@@ -1161,6 +1372,35 @@ export class WorldScene {
 
   get isReading() {
     return this.reading
+  }
+
+  get readingLinks() {
+    const seen = new Set<string>()
+    const links: Array<{ text: string; href: string }> = []
+    for (const link of this.space?.page?.links ?? []) {
+      const key = `${link.text}|${link.href}`
+      if (link.text && !seen.has(key)) {
+        seen.add(key)
+        links.push({ text: link.text, href: link.href })
+      }
+    }
+    return links
+  }
+
+  get readingSections() {
+    return this.space?.page?.sections ?? []
+  }
+
+  readStep(direction: 1 | -1) {
+    return this.reading ? (this.space?.readStep(direction) ?? null) : null
+  }
+
+  readBottom() {
+    return this.reading && Boolean(this.space?.flyToBottom())
+  }
+
+  readSection(y: number) {
+    return this.reading && Boolean(this.space?.flyToY(y))
   }
 
   private loadHidden(url: string) {
@@ -1569,6 +1809,8 @@ export class WorldScene {
       }
       if (this.drag.moved) {
         if (!this.locked) {
+          this.viewHold = false
+          this.spin = null
           this.yawOffset -= dx * 0.006
           this.pitchOffset = THREE.MathUtils.clamp(this.pitchOffset + dy * 0.004, -0.3, 0.85)
         }
@@ -1617,7 +1859,7 @@ export class WorldScene {
   private onWheel = (event: WheelEvent) => {
     event.preventDefault()
     if (!this.locked) {
-      this.distance = THREE.MathUtils.clamp(this.distance + event.deltaY * 0.01, 4, 20)
+      this.distance = THREE.MathUtils.clamp(this.distance + event.deltaY * 0.01, MIN_DISTANCE, MAX_DISTANCE)
     }
   }
 

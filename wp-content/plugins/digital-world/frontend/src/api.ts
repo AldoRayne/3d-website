@@ -53,9 +53,10 @@ export function fetchWorld(): Promise<WorldResponse> {
   return request<WorldResponse>('/world')
 }
 
-export function askNavigator(message: string, history: ChatTurn[], context?: NavigatorContext): Promise<NavigatorResponse> {
+export function askNavigator(message: string, history: ChatTurn[], context?: NavigatorContext, signal?: AbortSignal): Promise<NavigatorResponse> {
   return request<NavigatorResponse>('/navigate', {
     method: 'POST',
     body: JSON.stringify({ message, history, context }),
+    signal,
   })
 }

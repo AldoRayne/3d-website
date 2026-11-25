@@ -1,9 +1,12 @@
 import { computed, ref, watch } from 'vue'
 import { canListen, listen, speak, speaking, stopSpeaking, type ListenError } from '@/voice'
+import type { Reply } from '@/types'
 
 export { canListen }
 
 const VOICE_KEY = 'dw-navigator-voice'
+const ECHO_DELAY = 700
+const ECHO_WINDOW = 3000
 const NOTES: Record<ListenError, string> = {
   denied: 'Немає доступу до мікрофона. Дозвольте його в налаштуваннях браузера.',
   silence: 'Нічого не почув.',
@@ -11,7 +14,7 @@ const NOTES: Record<ListenError, string> = {
   failed: 'Не вдалося розпізнати мовлення.',
 }
 
-export type PhraseHandler = (text: string) => Promise<string | null>
+export type PhraseHandler = (text: string) => Promise<Reply | null>
 
 export const voiceMode = ref(false)
 export const listening = ref(false)
@@ -29,7 +32,7 @@ export const voiceStatus = computed(() => {
     return 'Озвучую відповідь. Esc — зупинити.'
   }
   if (voiceBusy.value) {
-    return 'Виконую…'
+    return listening.value ? 'Думаю… Можна сказати іншу команду.' : 'Виконую…'
   }
   if (voiceMode.value) {
     return 'Слухаю. Натисніть мікрофон, щоб вимкнути.'
@@ -38,6 +41,10 @@ export const voiceStatus = computed(() => {
 })
 
 let handler: PhraseHandler | null = null
+let interrupt: (() => void) | null = null
+let current: Promise<void> | null = null
+let spokenText = ''
+let spokenEndedAt = 0
 let session: ReturnType<typeof listen> = null
 let restartTimer = 0
 
@@ -58,21 +65,75 @@ watch(voiceReplies, (value) => {
   }
 })
 
-watch([voiceBusy, speaking], () => {
-  if (!voiceBusy.value && !speaking.value) {
+watch([voiceBusy, speaking], ([, nowSpeaking], [, wasSpeaking]) => {
+  if (wasSpeaking && !nowSpeaking) {
+    spokenEndedAt = performance.now()
+  }
+  if (voiceBusy.value || speaking.value) {
+    return
+  }
+  window.clearTimeout(restartTimer)
+  if (wasSpeaking) {
+    restartTimer = window.setTimeout(startCapture, ECHO_DELAY)
+  } else {
     startCapture()
   }
 })
 
+function words(text: string) {
+  return text
+    .toLowerCase()
+    .replace(/[’ʼ`]/g, "'")
+    .replace(/[^\p{L}\p{N}'\s]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+export function isEcho(text: string) {
+  if (!spokenText || performance.now() - spokenEndedAt > ECHO_WINDOW + ECHO_DELAY) {
+    return false
+  }
+  const heardWords = words(text)
+  return heardWords.length > 0 && words(spokenText).includes(heardWords)
+}
+
+function say(text: string) {
+  spokenText = text
+  speak(text)
+}
+
 export function onPhrase(next: PhraseHandler | null) {
   handler = next
+}
+
+export function setInterrupt(next: (() => void) | null) {
+  interrupt = next
+  if (next) {
+    startCapture()
+  }
+}
+
+async function dispatch(text: string) {
+  const previous = current
+  const job = (async () => {
+    if (previous) {
+      interrupt?.()
+      await previous
+    }
+    await handle(text)
+  })()
+  current = job
+  await job
+  if (current === job) {
+    current = null
+  }
 }
 
 async function handle(text: string) {
   voiceBusy.value = true
   voiceNote.value = ''
   stopSpeaking()
-  let reply: string | null = null
+  let reply: Reply | null = null
   try {
     reply = handler ? await handler(text) : null
   } finally {
@@ -80,16 +141,27 @@ async function handle(text: string) {
     voiceBusy.value = false
   }
   if (reply) {
-    lastReply.value = reply
-    if (voiceReplies.value) {
-      speak(reply)
+    lastReply.value = reply.text
+    if (voiceReplies.value && !reply.quiet) {
+      say(reply.text)
     }
+  }
+}
+
+export function announce(text: string) {
+  if (!voiceMode.value) {
+    return
+  }
+  lastReply.value = text
+  if (voiceReplies.value && !voiceBusy.value) {
+    session?.cancel()
+    say(text)
   }
 }
 
 function startCapture() {
   window.clearTimeout(restartTimer)
-  if (!voiceMode.value || session || voiceBusy.value || speaking.value) {
+  if (!voiceMode.value || session || (voiceBusy.value && !interrupt) || speaking.value) {
     return
   }
   session = listen({
@@ -97,9 +169,10 @@ function startCapture() {
       heard.value = text
     },
     done: (text) => {
-      void handle(text)
+      void dispatch(text)
     },
     error: (error) => {
+      heard.value = ''
       if (error !== 'silence') {
         stopVoice(error)
       }

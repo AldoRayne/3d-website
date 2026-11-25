@@ -130,6 +130,34 @@ export class MiniIsland {
     return true
   }
 
+  moveSelected(dx: number, dz: number): PlacementProblem | 'none' {
+    const slug = this.selected
+    const building = slug && this.model.buildings.get(slug)
+    const placement = slug ? this.model.placementOf(slug) : null
+    if (!slug || !building || !placement) {
+      return 'none'
+    }
+    const next = { ...placement, x: placement.x + dx, z: placement.z + dz }
+    const problem = checkPlacement(next, this.model.othersThan(slug), this.model.radius)
+    if (problem) {
+      return problem
+    }
+    this.model.place(building, next.x, next.z, next.quarter)
+    this.model.rebuildTerrain()
+    this.refreshSelection()
+    return null
+  }
+
+  get axes() {
+    this.root.updateMatrixWorld()
+    const origin = new THREE.Vector3().applyMatrix4(this.root.matrixWorld)
+    return {
+      origin,
+      x: new THREE.Vector3(1, 0, 0).applyMatrix4(this.root.matrixWorld),
+      z: new THREE.Vector3(0, 0, 1).applyMatrix4(this.root.matrixWorld),
+    }
+  }
+
   rotateSelected(step = 1) {
     const slug = this.selected
     const building = slug && this.model.buildings.get(slug)

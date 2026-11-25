@@ -26,13 +26,15 @@ export interface WorldResponse {
 
 export type AiProvider = 'claude' | 'ollama' | 'openai' | 'gemini'
 
-export type NavigatorAction = 'navigate' | 'open' | 'overview' | 'none'
+export type NavigatorAction = string
 
 export type CameraTransition = 'fly' | 'instant'
 
 export interface NavigatorCommand {
   action: NavigatorAction
   target: string | null
+  value?: string
+  amount?: number
   camera: { transition: CameraTransition }
 }
 
@@ -45,6 +47,12 @@ export interface NavigatorResponse {
 
 export type NavigatorScreen = 'world' | 'entering' | 'reading' | 'book'
 
+export interface NavigatorActionInfo {
+  id: string
+  description: string
+  values: string[]
+}
+
 export interface NavigatorContext {
   screen: NavigatorScreen
   bookPage: 'guest' | 'island' | 'avatar' | null
@@ -52,6 +60,13 @@ export interface NavigatorContext {
   visiting: boolean
   near: string | null
   reading: string | null
+  selected: string | null
+  actions?: NavigatorActionInfo[]
+}
+
+export interface Reply {
+  text: string
+  quiet?: boolean
 }
 
 export interface ChatTurn {

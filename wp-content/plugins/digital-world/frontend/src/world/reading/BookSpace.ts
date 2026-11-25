@@ -197,10 +197,46 @@ export class BookSpace {
 
   flyToAnchor(id: string) {
     const y = this.sculpture?.anchors.get(id)
-    if (this.sculpture && y !== undefined) {
-      const distance = this.fillDistance(this.sculpture)
-      void this.flyTo(new THREE.Vector3(0, y - this.sculpture.viewHeight * 0.3, distance), new THREE.Vector3(0, y - this.sculpture.viewHeight * 0.3, 0))
+    if (y !== undefined) {
+      this.flyToY(y)
     }
+  }
+
+  flyToY(y: number) {
+    const sculpture = this.sculpture
+    if (!sculpture) {
+      return false
+    }
+    const distance = this.fillDistance(sculpture)
+    const target = y - sculpture.viewHeight * 0.3
+    void this.flyTo(new THREE.Vector3(0, target, distance), new THREE.Vector3(0, target, 0))
+    return true
+  }
+
+  readStep(direction: 1 | -1) {
+    const sculpture = this.sculpture
+    if (!sculpture) {
+      return null
+    }
+    const camera = this.options.camera
+    const top = 0
+    const bottom = Math.min(0, sculpture.bounds.min.y + sculpture.viewHeight * 0.4)
+    const y = THREE.MathUtils.clamp(camera.position.y - direction * sculpture.viewHeight * 0.8, bottom, top)
+    if (Math.abs(y - camera.position.y) < 0.01) {
+      return false
+    }
+    void this.flyTo(new THREE.Vector3(0, y, this.fillDistance(sculpture) * 1.05), new THREE.Vector3(0, y, 0))
+    return true
+  }
+
+  flyToBottom() {
+    const sculpture = this.sculpture
+    if (!sculpture) {
+      return false
+    }
+    const y = Math.min(0, sculpture.bounds.min.y + sculpture.viewHeight * 0.4)
+    void this.flyTo(new THREE.Vector3(0, y, this.fillDistance(sculpture) * 1.05), new THREE.Vector3(0, y, 0))
+    return true
   }
 
   update(dt: number, elapsed: number) {

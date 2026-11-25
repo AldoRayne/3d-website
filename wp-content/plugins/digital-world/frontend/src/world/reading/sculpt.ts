@@ -11,8 +11,9 @@ const SLAB = 0.05
 export interface Sculpture {
   group: THREE.Group
   bounds: THREE.Box3
-  links: Array<{ box: THREE.Box3; href: string }>
+  links: Array<{ box: THREE.Box3; href: string; text: string }>
   anchors: Map<string, number>
+  sections: Array<{ text: string; y: number }>
   background: THREE.Color
   viewHeight: number
   title: string
@@ -214,7 +215,7 @@ export async function sculptPage(doc: Document, view: { width: number; height: n
   const glyphMaterial = own(riseMaterial(new THREE.MeshLambertMaterial({ color: '#ffffff' }), rise, true))
   const buckets = new Map<string, { geometry: THREE.BufferGeometry; matrices: THREE.Matrix4[]; colors: THREE.Color[] }>()
   const bounds = new THREE.Box3()
-  const links: Array<{ box: THREE.Box3; href: string }> = []
+  const links: Array<{ box: THREE.Box3; href: string; text: string }> = []
   const scale = new THREE.Vector3()
   const position = new THREE.Vector3()
   const identity = new THREE.Quaternion()
@@ -262,6 +263,7 @@ export async function sculptPage(doc: Document, view: { width: number; height: n
         links.push({
           box: new THREE.Box3(new THREE.Vector3(x(rect.left), y(rect.bottom), 0), new THREE.Vector3(x(rect.right), y(rect.top), top)),
           href: anchor.href,
+          text: (anchor.textContent ?? anchor.getAttribute('aria-label') ?? '').replace(/\s+/g, ' ').trim(),
         })
       }
     }
@@ -413,6 +415,16 @@ export async function sculptPage(doc: Document, view: { width: number; height: n
     }
   }
 
+  const sections: Array<{ text: string; y: number }> = []
+  for (const root of roots) {
+    for (const heading of root.querySelectorAll<HTMLElement>('h1, h2, h3, h4')) {
+      const text = (heading.textContent ?? '').replace(/\s+/g, ' ').trim()
+      if (text && !heading.closest(SKIP)) {
+        sections.push({ text, y: y(heading.getBoundingClientRect().top) })
+      }
+    }
+  }
+
   if (bounds.isEmpty()) {
     bounds.set(new THREE.Vector3(-1, -1, 0), new THREE.Vector3(1, 1, 0.1))
   }
@@ -425,6 +437,7 @@ export async function sculptPage(doc: Document, view: { width: number; height: n
     bounds,
     links,
     anchors,
+    sections,
     background,
     viewHeight: view.height * UNIT,
     title: (doc.querySelector('main .wp-block-post-title, .wp-block-post-title')?.textContent ?? doc.title).trim(),
