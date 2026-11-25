@@ -353,6 +353,11 @@ export class WorldScene {
     }
   }
 
+  stop() {
+    this.cancelWalk()
+    this.keys.clear()
+  }
+
   walkTo(slug: string, transition: CameraTransition = 'fly'): Promise<boolean> {
     const target = this.walkTarget(slug)
     if (!target || this.locked) {

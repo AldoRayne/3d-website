@@ -1,17 +1,22 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { nextTick, ref, watch } from 'vue'
 import { askNavigator, ApiError } from '@/api'
-import { canListen, canSpeak, listen, speak, speaking, stopSpeaking, type ListenError } from '@/voice'
-import type { AiProvider, ChatTurn, NavigatorCommand } from '@/types'
+import { canSpeak, speaking, stopSpeaking } from '@/voice'
+import { canListen, cancelVoice, heard, listening, toggleVoice, voiceMode, voiceReplies, voiceStatus } from '@/voice-control'
+import type { AiProvider, ChatTurn, NavigatorCommand, NavigatorContext } from '@/types'
 
-defineProps<{ provider: AiProvider | null }>()
+const props = defineProps<{
+  provider: AiProvider | null
+  context: NavigatorContext
+  local?: (text: string) => Promise<string | null>
+}>()
 
 const PROVIDER_LABELS: Record<AiProvider, string> = { claude: 'Claude', ollama: 'Ollama', openai: 'OpenAI', gemini: 'Gemini' }
 const emit = defineEmits<{ command: [command: NavigatorCommand] }>()
 
 interface Message extends ChatTurn {
   id: number
-  source?: 'ai' | 'fallback' | 'error'
+  source?: 'ai' | 'fallback' | 'local' | 'error'
 }
 
 const suggestions = [
@@ -35,35 +40,9 @@ const log = ref<HTMLElement | null>(null)
 const input = ref<HTMLInputElement | null>(null)
 let nextId = 1
 
-const VOICE_KEY = 'dw-navigator-voice'
-const VOICE_NOTES: Record<ListenError, string> = {
-  denied: 'Немає доступу до мікрофона. Дозвольте його в налаштуваннях браузера.',
-  silence: 'Нічого не почув.',
-  network: 'Розпізнавання мовлення недоступне без інтернету.',
-  failed: 'Не вдалося розпізнати мовлення.',
-}
-
-const voiceMode = ref(false)
-const listening = ref(false)
-const voiceNote = ref('')
-const voiceReplies = ref(readVoicePreference())
-let session: ReturnType<typeof listen> = null
-let restartTimer = 0
-
-function readVoicePreference() {
-  try {
-    return localStorage.getItem(VOICE_KEY) !== 'off'
-  } catch {
-    return true
-  }
-}
-
-watch(voiceReplies, (value) => {
-  try {
-    localStorage.setItem(VOICE_KEY, value ? 'on' : 'off')
-  } catch {}
-  if (!value) {
-    stopSpeaking()
+watch(heard, (text) => {
+  if (voiceMode.value && text) {
+    draft.value = text
   }
 })
 
@@ -73,79 +52,12 @@ watch(draft, () => {
   }
 })
 
-watch([busy, speaking], () => {
-  if (!busy.value && !speaking.value) {
-    startCapture()
-  }
-})
-
-function stopVoice(error?: ListenError) {
-  voiceMode.value = false
-  window.clearTimeout(restartTimer)
-  if (error) {
-    voiceNote.value = VOICE_NOTES[error]
-  }
-}
-
-function startCapture() {
-  window.clearTimeout(restartTimer)
-  if (!voiceMode.value || session || busy.value || speaking.value) {
-    return
-  }
-  session = listen({
-    interim: (text) => {
-      draft.value = text
-    },
-    done: (text) => {
-      void send(text, true)
-    },
-    error: (error) => {
-      if (error !== 'silence') {
-        stopVoice(error)
-      }
-    },
-    end: () => {
-      listening.value = false
-      session = null
-      restartTimer = window.setTimeout(startCapture, 300)
-    },
-  })
-  listening.value = Boolean(session)
-  if (!session) {
-    stopVoice('failed')
-  }
-}
-
-function toggleVoice() {
-  if (voiceMode.value) {
-    stopVoice()
-    session?.stop()
-    return
-  }
-  stopSpeaking()
-  voiceNote.value = ''
-  draft.value = ''
-  voiceMode.value = true
-  startCapture()
-}
-
 function onEscape(event: KeyboardEvent) {
-  if (speaking.value) {
+  if (cancelVoice()) {
     event.stopPropagation()
-    stopSpeaking()
-  } else if (voiceMode.value) {
-    event.stopPropagation()
-    stopVoice()
-    session?.cancel()
     draft.value = ''
   }
 }
-
-onBeforeUnmount(() => {
-  stopVoice()
-  session?.cancel()
-  stopSpeaking()
-})
 
 async function scrollDown() {
   await nextTick()
@@ -155,37 +67,42 @@ async function scrollDown() {
 function history(): ChatTurn[] {
   return messages.value
     .slice(1)
-    .filter((message) => message.source !== 'error')
+    .filter((message) => message.source !== 'error' && message.source !== 'local')
     .slice(-6)
     .map(({ role, content }) => ({ role, content }))
 }
 
-async function send(text = draft.value, spoken = false) {
+function answer(content: string, source: Message['source']) {
+  messages.value.push({ id: nextId++, role: 'assistant', content, source })
+  return content
+}
+
+async function ask(text = draft.value, spoken = false): Promise<string | null> {
   const message = text.trim()
   if (!message || busy.value) {
-    return
+    return null
   }
   const previous = history()
   messages.value.push({ id: nextId++, role: 'user', content: message })
   draft.value = ''
   busy.value = true
-  voiceNote.value = ''
-  stopSpeaking()
   void scrollDown()
-  let reply = ''
 
   try {
-    const response = await askNavigator(message, previous)
-    reply = response.reply
-    messages.value.push({ id: nextId++, role: 'assistant', content: response.reply, source: response.source })
+    const local = await props.local?.(message)
+    if (local) {
+      return answer(local, 'local')
+    }
+    const response = await askNavigator(message, previous, props.context)
     emit('command', response.command)
+    return answer(response.reply, response.source)
   } catch (error) {
-    const text =
+    return answer(
       error instanceof ApiError && error.status === 429
         ? 'Забагато запитів. Спробуйте за хвилину.'
-        : 'Не вдалося звʼязатися з провідником. Спробуйте ще раз.'
-    reply = text
-    messages.value.push({ id: nextId++, role: 'assistant', content: text, source: 'error' })
+        : 'Не вдалося звʼязатися з провідником. Спробуйте ще раз.',
+      'error',
+    )
   } finally {
     busy.value = false
     void scrollDown()
@@ -193,10 +110,9 @@ async function send(text = draft.value, spoken = false) {
       input.value?.focus()
     }
   }
-  if (spoken && voiceReplies.value) {
-    speak(reply)
-  }
 }
+
+defineExpose({ ask })
 </script>
 
 <template>
@@ -218,12 +134,12 @@ async function send(text = draft.value, spoken = false) {
       </ol>
 
       <div v-if="messages.length < 3" class="dw-chat__suggestions">
-        <button v-for="suggestion in suggestions" :key="suggestion" type="button" :disabled="busy" @click="send(suggestion)">
+        <button v-for="suggestion in suggestions" :key="suggestion" type="button" :disabled="busy" @click="ask(suggestion)">
           {{ suggestion }}
         </button>
       </div>
 
-      <form class="dw-chat__form" @submit.prevent="send()">
+      <form class="dw-chat__form" @submit.prevent="ask()">
         <label class="dw-sr-only" for="dw-chat-input">Повідомлення провіднику</label>
         <input
           id="dw-chat-input"
@@ -257,9 +173,7 @@ async function send(text = draft.value, spoken = false) {
 
       <div v-if="canListen" class="dw-chat__voice">
         <p class="dw-chat__voice-note" role="status" aria-live="polite">
-          <template v-if="voiceNote">{{ voiceNote }}</template>
-          <template v-else-if="speaking">Озвучую відповідь. Esc — зупинити.</template>
-          <template v-else-if="voiceMode">Голосове керування увімкнено: кожну фразу надсилаю одразу. Натисніть мікрофон, щоб вимкнути.</template>
+          {{ voiceStatus }}
         </p>
         <label v-if="canSpeak" class="dw-chat__voice-toggle">
           <input v-model="voiceReplies" type="checkbox" />

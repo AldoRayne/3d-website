@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { boot, fetchWorld } from '@/api'
-import type { CameraTransition, Layout, NavigatorCommand, WorldObject } from '@/types'
+import type { CameraTransition, Layout, NavigatorCommand, NavigatorContext, WorldObject } from '@/types'
 import { isEditableTarget, isWebGLAvailable, WorldScene, type StandLayout } from '@/world/WorldScene'
 import { STAND_SLUG } from '@/world/stand'
 import { currentUser, logout, resetAvatar, resetLayout, saveAvatar, saveLayout } from '@/auth'
@@ -18,10 +18,14 @@ import GuestBook from '@/components/GuestBook.vue'
 import GuestBookPage from '@/components/GuestBookPage.vue'
 import NavigatorChat from '@/components/NavigatorChat.vue'
 import ReadingHud from '@/components/ReadingHud.vue'
+import VoiceDock from '@/components/VoiceDock.vue'
+import { canListen, disposeVoice, onPhrase, stopVoice } from '@/voice-control'
+import { createCommandSet } from '@/commands'
 
 const LAST_DOOR_KEY = 'dw-last-door'
 
 const stage = ref<HTMLElement | null>(null)
+const chat = ref<InstanceType<typeof NavigatorChat> | null>(null)
 const scene = shallowRef<WorldScene | null>(null)
 const objects = ref<WorldObject[]>([])
 const siteName = ref(boot.siteName)
@@ -462,6 +466,17 @@ function walkTo(slug: string, transition: CameraTransition = 'fly') {
 }
 
 async function runCommand(command: NavigatorCommand) {
+  if (command.action === 'none') {
+    return
+  }
+  if (entering.value) {
+    showHint(WAIT)
+    return
+  }
+  if (command.action === 'open' && command.target === STAND_SLUG && bookOpen.value) {
+    return
+  }
+  await leaveScreens()
   if ((command.action === 'navigate' || command.action === 'open') && command.target) {
     const arrived = await walkTo(command.target, command.camera.transition)
     if (arrived && command.action === 'open' && command.target === STAND_SLUG && atStand.value) {
@@ -470,6 +485,118 @@ async function runCommand(command: NavigatorCommand) {
   } else if (command.action === 'overview') {
     scene.value?.overview()
   }
+}
+
+const navigatorContext = computed<NavigatorContext>(() => ({
+  screen: entering.value ? 'entering' : reading.value ? 'reading' : bookOpen.value ? 'book' : 'world',
+  bookPage: bookOpen.value ? (memberPage.value || pageTurning.value ? bookPage.value : 'guest') : null,
+  signedIn: Boolean(currentUser.value),
+  visiting: Boolean(visit),
+  near: zone.value ?? (atStand.value ? STAND_SLUG : null),
+  reading: reading.value?.title ?? null,
+}))
+
+const WAIT = 'Зачекайте, ще йде перехід.'
+
+async function leaveScreens() {
+  if (reading.value) {
+    exitReading()
+  }
+  if (bookOpen.value) {
+    await closeBook()
+  }
+}
+
+const commands = createCommandSet([
+  {
+    id: 'stop',
+    phrases: ['стоп', 'стій', 'зупинись', 'зупинися', 'зупинитись', 'stop'],
+    hint: '«стоп»',
+    available: (context) => context.screen === 'world' || 'Зараз немає руху, який можна зупинити.',
+    run: () => {
+      scene.value?.stop()
+      return 'Зупинився.'
+    },
+  },
+  {
+    id: 'overview',
+    phrases: ['покажи все', 'покажи весь світ', 'покажи увесь світ', 'покажи весь острів', 'огляд', 'загальний вигляд', 'вид згори', 'вигляд згори', 'згори', 'overview'],
+    hint: '«покажи все»',
+    available: () => true,
+    run: async () => {
+      await leaveScreens()
+      scene.value?.overview()
+      return 'Ось увесь острів.'
+    },
+  },
+  {
+    id: 'open-book',
+    phrases: ['відкрий книгу', 'відкрити книгу', 'відкрий книгу гостей', 'відкрити книгу гостей'],
+    hint: '«відкрий книгу»',
+    available: (context) => {
+      if (context.visiting) {
+        return 'У гостьовому перегляді книга недоступна.'
+      }
+      if (context.screen === 'book') {
+        return 'Книга вже відкрита.'
+      }
+      return context.screen === 'world' && context.near === STAND_SLUG
+    },
+    run: async () => {
+      await openBook()
+      return 'Відкриваю книгу.'
+    },
+  },
+  {
+    id: 'close-book',
+    phrases: ['закрий книгу', 'закрити книгу', 'сховай книгу'],
+    hint: '«закрий книгу»',
+    available: (context) => context.screen === 'book' || 'Книга зараз не відкрита.',
+    run: async () => {
+      await closeBook()
+      return 'Закриваю книгу.'
+    },
+  },
+  {
+    id: 'leave',
+    phrases: ['вийди', 'вийти', 'вихід', 'назад', 'повернись назад', 'вийди з будинку', 'вийти з будинку', 'закрий', 'закрити', 'exit', 'back'],
+    hint: '«вийди»',
+    available: (context) => context.screen === 'reading' || context.screen === 'book',
+    run: async (context) => {
+      if (context.screen === 'reading') {
+        exitReading()
+        return 'Виходжу на вулицю.'
+      }
+      await closeBook()
+      return 'Закриваю книгу.'
+    },
+  },
+  {
+    id: 'voice-off',
+    phrases: ['вимкни мікрофон', 'вимкнути мікрофон', 'вимкни голос', 'вимкни голосове керування', 'вимкнути голосове керування', 'досить слухати'],
+    available: () => true,
+    run: () => {
+      stopVoice()
+      return 'Вимикаю мікрофон.'
+    },
+  },
+  {
+    id: 'help',
+    phrases: ['що ти вмієш', 'що вмієш', 'допомога', 'допоможи', 'команди', 'які є команди', 'що можна сказати', 'help'],
+    available: () => true,
+    run: (context) => {
+      const hints = commands.hints(context)
+      const list = hints.length ? `Можна сказати: ${hints.join(', ')}. ` : ''
+      return `${list}Або просто скажіть, куди хочете потрапити.`
+    },
+  },
+])
+
+async function runLocal(text: string) {
+  if (navigatorContext.value.screen === 'entering' && commands.match(text)) {
+    return WAIT
+  }
+  return commands.run(text, navigatorContext.value)
 }
 
 function restoreAtDoor(slug: string | null) {
@@ -527,6 +654,7 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 onMounted(async () => {
+  onPhrase((text) => chat.value?.ask(text, true) ?? Promise.resolve(null))
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('pageshow', onPageShow)
   window.addEventListener('popstate', onPopState)
@@ -579,6 +707,8 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  onPhrase(null)
+  disposeVoice()
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('pageshow', onPageShow)
   window.removeEventListener('popstate', onPopState)
@@ -624,7 +754,7 @@ onBeforeUnmount(() => {
       </div>
       <DoorCard v-if="zoneObject" :object="zoneObject" :touch="touch" @enter="enter(zoneObject.slug)" />
       <StandCard v-else-if="showStandCard" :touch="touch" :visiting="!!visit" @open="openBook" />
-      <NavigatorChat :provider="aiProvider" @command="runCommand" />
+      <NavigatorChat ref="chat" :provider="aiProvider" :context="navigatorContext" :local="runLocal" @command="runCommand" />
     </div>
 
     <GuestBook v-if="standLayout" :layout="standLayout" :passthrough="memberPage" :print-left="memberPage" @close="closeBook">
@@ -667,6 +797,8 @@ onBeforeUnmount(() => {
     >
       <AvatarEditor v-if="avatarShown && !standLayout.left" compact :avatar="avatar" @change="onAvatarChange" />
     </IslandToolbar>
+
+    <VoiceDock v-if="canListen && webgl && objects.length && (entering || reading || bookOpen)" />
 
     <ReadingHud
       v-if="reading"

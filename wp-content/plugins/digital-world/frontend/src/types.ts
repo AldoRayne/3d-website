@@ -43,6 +43,17 @@ export interface NavigatorResponse {
   provider?: AiProvider
 }
 
+export type NavigatorScreen = 'world' | 'entering' | 'reading' | 'book'
+
+export interface NavigatorContext {
+  screen: NavigatorScreen
+  bookPage: 'guest' | 'island' | 'avatar' | null
+  signedIn: boolean
+  visiting: boolean
+  near: string | null
+  reading: string | null
+}
+
 export interface ChatTurn {
   role: 'user' | 'assistant'
   content: string

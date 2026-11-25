@@ -1,4 +1,4 @@
-import type { BootData, ChatTurn, NavigatorResponse, WorldResponse } from '@/types'
+import type { BootData, ChatTurn, NavigatorContext, NavigatorResponse, WorldResponse } from '@/types'
 
 declare global {
   interface Window {
@@ -53,9 +53,9 @@ export function fetchWorld(): Promise<WorldResponse> {
   return request<WorldResponse>('/world')
 }
 
-export function askNavigator(message: string, history: ChatTurn[]): Promise<NavigatorResponse> {
+export function askNavigator(message: string, history: ChatTurn[], context?: NavigatorContext): Promise<NavigatorResponse> {
   return request<NavigatorResponse>('/navigate', {
     method: 'POST',
-    body: JSON.stringify({ message, history }),
+    body: JSON.stringify({ message, history, context }),
   })
 }

@@ -598,6 +598,74 @@ input {
   }
 }
 
+.dw-voice-dock {
+  position: fixed;
+  right: var(--dw-gutter);
+  bottom: max(var(--dw-gutter), env(safe-area-inset-bottom));
+  z-index: 40;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  max-width: min(360px, calc(100vw - 2 * var(--dw-gutter)));
+  pointer-events: none;
+}
+
+.dw-voice-dock > * {
+  pointer-events: auto;
+}
+
+.dw-voice-dock__status {
+  margin: 0;
+  padding: 10px 14px;
+  background: var(--dw-surface-strong);
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-radius);
+  color: var(--dw-text);
+  font-size: 13px;
+  line-height: 1.4;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+}
+
+.dw-voice-dock__mic {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border: 1px solid var(--dw-border-strong);
+  border-radius: 50%;
+  background: var(--dw-surface-strong);
+  color: var(--dw-text);
+  cursor: pointer;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+}
+
+.dw-voice-dock__mic:hover {
+  border-color: var(--dw-primary);
+}
+
+.dw-voice-dock__mic.is-on {
+  border-color: var(--dw-danger);
+  background: var(--dw-danger);
+  color: #3b0a14;
+}
+
+.dw-voice-dock__mic.is-listening {
+  animation: dw-mic 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dw-voice-dock__mic.is-listening {
+    animation: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .dw-voice-dock {
+    bottom: max(88px, calc(env(safe-area-inset-bottom) + 72px));
+  }
+}
+
 .dw-chat__voice {
   display: flex;
   flex-wrap: wrap;
