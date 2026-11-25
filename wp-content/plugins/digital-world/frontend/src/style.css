@@ -576,10 +576,13 @@ input {
   border-color: var(--dw-primary);
 }
 
-.dw-chat__form .dw-chat__mic.is-listening {
+.dw-chat__form .dw-chat__mic.is-on {
   border-color: var(--dw-danger);
   background: var(--dw-danger);
   color: #3b0a14;
+}
+
+.dw-chat__form .dw-chat__mic.is-listening {
   animation: dw-mic 1.2s ease-in-out infinite;
 }
 

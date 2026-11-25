@@ -38,15 +38,17 @@ let nextId = 1
 const VOICE_KEY = 'dw-navigator-voice'
 const VOICE_NOTES: Record<ListenError, string> = {
   denied: 'Немає доступу до мікрофона. Дозвольте його в налаштуваннях браузера.',
-  silence: 'Нічого не почув. Натисніть мікрофон і скажіть ще раз.',
+  silence: 'Нічого не почув.',
   network: 'Розпізнавання мовлення недоступне без інтернету.',
   failed: 'Не вдалося розпізнати мовлення.',
 }
 
+const voiceMode = ref(false)
 const listening = ref(false)
 const voiceNote = ref('')
 const voiceReplies = ref(readVoicePreference())
 let session: ReturnType<typeof listen> = null
+let restartTimer = 0
 
 function readVoicePreference() {
   try {
@@ -66,19 +68,30 @@ watch(voiceReplies, (value) => {
 })
 
 watch(draft, () => {
-  if (!listening.value && speaking.value) {
+  if (!voiceMode.value && speaking.value) {
     stopSpeaking()
   }
 })
 
-function toggleListening() {
-  if (listening.value) {
-    session?.stop()
+watch([busy, speaking], () => {
+  if (!busy.value && !speaking.value) {
+    startCapture()
+  }
+})
+
+function stopVoice(error?: ListenError) {
+  voiceMode.value = false
+  window.clearTimeout(restartTimer)
+  if (error) {
+    voiceNote.value = VOICE_NOTES[error]
+  }
+}
+
+function startCapture() {
+  window.clearTimeout(restartTimer)
+  if (!voiceMode.value || session || busy.value || speaking.value) {
     return
   }
-  stopSpeaking()
-  voiceNote.value = ''
-  draft.value = ''
   session = listen({
     interim: (text) => {
       draft.value = text
@@ -87,31 +100,49 @@ function toggleListening() {
       void send(text, true)
     },
     error: (error) => {
-      voiceNote.value = VOICE_NOTES[error]
+      if (error !== 'silence') {
+        stopVoice(error)
+      }
     },
     end: () => {
       listening.value = false
       session = null
+      restartTimer = window.setTimeout(startCapture, 300)
     },
   })
   listening.value = Boolean(session)
   if (!session) {
-    voiceNote.value = VOICE_NOTES.failed
+    stopVoice('failed')
   }
 }
 
+function toggleVoice() {
+  if (voiceMode.value) {
+    stopVoice()
+    session?.stop()
+    return
+  }
+  stopSpeaking()
+  voiceNote.value = ''
+  draft.value = ''
+  voiceMode.value = true
+  startCapture()
+}
+
 function onEscape(event: KeyboardEvent) {
-  if (listening.value) {
-    event.stopPropagation()
-    session?.cancel()
-    draft.value = ''
-  } else if (speaking.value) {
+  if (speaking.value) {
     event.stopPropagation()
     stopSpeaking()
+  } else if (voiceMode.value) {
+    event.stopPropagation()
+    stopVoice()
+    session?.cancel()
+    draft.value = ''
   }
 }
 
 onBeforeUnmount(() => {
+  stopVoice()
   session?.cancel()
   stopSpeaking()
 })
@@ -201,34 +232,34 @@ async function send(text = draft.value, spoken = false) {
           type="text"
           maxlength="500"
           autocomplete="off"
-          :placeholder="listening ? 'Слухаю…' : 'Куди летимо?'"
+          :placeholder="voiceMode ? 'Слухаю…' : 'Куди летимо?'"
           :disabled="busy"
-          :readonly="listening"
+          :readonly="voiceMode"
         />
         <button
           v-if="canListen"
           type="button"
           class="dw-chat__mic"
-          :class="{ 'is-listening': listening }"
-          :disabled="busy"
-          :aria-pressed="listening"
-          :aria-label="listening ? 'Зупинити запис' : 'Сказати голосом'"
-          :title="listening ? 'Зупинити запис' : 'Сказати голосом'"
-          @click="toggleListening"
+          :class="{ 'is-on': voiceMode, 'is-listening': listening }"
+          :disabled="busy && !voiceMode"
+          :aria-pressed="voiceMode"
+          :aria-label="voiceMode ? 'Вимкнути голосове керування' : 'Увімкнути голосове керування'"
+          :title="voiceMode ? 'Вимкнути голосове керування' : 'Увімкнути голосове керування'"
+          @click="toggleVoice"
         >
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
             <rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor" />
             <path d="M6 11a6 6 0 0 0 12 0M12 17v4M8.5 21h7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
           </svg>
         </button>
-        <button type="submit" :disabled="busy || listening || !draft.trim()" aria-label="Надіслати">↑</button>
+        <button type="submit" :disabled="busy || voiceMode || !draft.trim()" aria-label="Надіслати">↑</button>
       </form>
 
       <div v-if="canListen" class="dw-chat__voice">
         <p class="dw-chat__voice-note" role="status" aria-live="polite">
           <template v-if="voiceNote">{{ voiceNote }}</template>
-          <template v-else-if="listening">Слухаю. Натисніть мікрофон ще раз, щоб надіслати, Esc — скасувати.</template>
           <template v-else-if="speaking">Озвучую відповідь. Esc — зупинити.</template>
+          <template v-else-if="voiceMode">Голосове керування увімкнено: кожну фразу надсилаю одразу. Натисніть мікрофон, щоб вимкнути.</template>
         </p>
         <label v-if="canSpeak" class="dw-chat__voice-toggle">
           <input v-model="voiceReplies" type="checkbox" />
