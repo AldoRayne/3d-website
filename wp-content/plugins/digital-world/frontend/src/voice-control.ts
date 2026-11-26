@@ -21,6 +21,7 @@ export const listening = ref(false)
 export const heard = ref('')
 export const voiceNote = ref('')
 export const voiceBusy = ref(false)
+export const voiceHold = ref(false)
 export const lastReply = ref('')
 export const voiceReplies = ref(readPreference())
 
@@ -31,7 +32,7 @@ export const voiceStatus = computed(() => {
   if (speaking.value) {
     return 'Озвучую відповідь. Esc — зупинити.'
   }
-  if (voiceBusy.value) {
+  if (voiceBusy.value || voiceHold.value) {
     return listening.value ? 'Виконую… Можна сказати «стоп».' : 'Виконую…'
   }
   if (voiceMode.value) {
@@ -106,7 +107,7 @@ export function onPhrase(next: PhraseHandler | null) {
 }
 
 async function dispatch(text: string) {
-  if (current) {
+  if (current || voiceHold.value) {
     await aside(text)
     return
   }

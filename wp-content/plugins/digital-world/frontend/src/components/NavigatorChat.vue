@@ -11,7 +11,7 @@ const props = defineProps<{
   local?: (text: string) => Promise<Reply | null>
   execute?: (command: NavigatorCommand) => Promise<{ ok: boolean; text: string; quiet?: boolean } | null>
   urgent?: (text: string) => Promise<{ id: string; ok: boolean; reply: Reply } | null>
-  blocked?: () => boolean
+  blocked?: () => string | null
 }>()
 
 const PROVIDER_LABELS: Record<AiProvider, string> = { claude: 'Claude', ollama: 'Ollama', openai: 'OpenAI', gemini: 'Gemini' }
@@ -80,8 +80,7 @@ function answer(content: string, source: Message['source'], quiet = false): Repl
   return { text: content, quiet }
 }
 
-async function interject(message: string): Promise<Reply> {
-  const transition = !busy.value
+async function interject(message: string, reason: string | null): Promise<Reply> {
   messages.value.push({ id: nextId++, role: 'user', content: message, source: 'aside' })
   draft.value = ''
   void scrollDown()
@@ -95,10 +94,7 @@ async function interject(message: string): Promise<Reply> {
   if (urgent) {
     return answer(urgent.reply.text, urgent.ok ? 'aside' : 'error', urgent.reply.quiet)
   }
-  return answer(
-    transition ? 'Зачекайте, ще йде перехід. Можна сказати «швидше» або «стоп».' : 'Ще виконую попередню команду. Зачекайте або скажіть «стоп».',
-    'error',
-  )
+  return answer(reason ?? 'Ще виконую попередню команду. Зачекайте або скажіть «стоп».', 'error')
 }
 
 async function ask(text = draft.value, spoken = false): Promise<Reply | null> {
@@ -106,8 +102,9 @@ async function ask(text = draft.value, spoken = false): Promise<Reply | null> {
   if (!message) {
     return null
   }
-  if (busy.value || props.blocked?.()) {
-    return interject(message)
+  const reason = busy.value ? null : (props.blocked?.() ?? null)
+  if (busy.value || reason) {
+    return interject(message, reason)
   }
   const previous = history()
   const asked = { id: nextId++, role: 'user' as const, content: message }

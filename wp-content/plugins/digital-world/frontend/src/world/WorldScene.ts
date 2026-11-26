@@ -79,6 +79,7 @@ export interface WorldSceneOptions {
   onIslandChange?: (placements: Map<string, Placement>) => void
   onLink?: (href: string) => void
   onBlocked?: () => void
+  onMotion?: (moving: boolean) => void
   reducedMotion?: boolean
   avatar?: Avatar
 }
@@ -179,6 +180,8 @@ export class WorldScene {
   private cinematicLook = new THREE.Vector3()
   private drag: { id: number; x: number; y: number; moved: boolean } | null = null
   private locked = false
+  private moving = false
+  private pageLoads = 0
   private timeline: gsap.core.Timeline | null = null
   private moveSpeed = 0
   private shadows: boolean
@@ -707,6 +710,23 @@ export class WorldScene {
     this.camera.position.lerp(position, k)
     this.look.lerp(target, k)
     this.camera.lookAt(this.look)
+  }
+
+  private updateMotion() {
+    const moving = Boolean(
+      this.walk ||
+        this.drive ||
+        this.spin ||
+        this.orbit ||
+        this.pageLoads ||
+        this.timeline?.isActive() ||
+        this.islandTween?.isActive() ||
+        (this.reading && this.space?.moving),
+    )
+    if (moving !== this.moving) {
+      this.moving = moving
+      this.options.onMotion?.(moving)
+    }
   }
 
   private updateZone() {
@@ -1436,6 +1456,15 @@ export class WorldScene {
   }
 
   async readUrl(url: string, color: string, slug: string | null) {
+    this.pageLoads++
+    try {
+      return await this.loadPage(url, color, slug)
+    } finally {
+      this.pageLoads--
+    }
+  }
+
+  private async loadPage(url: string, color: string, slug: string | null) {
     const frame = await this.loadHidden(url)
     const sculpture = await this.sculpt(frame, color)
     frame.remove()
@@ -1957,6 +1986,7 @@ export class WorldScene {
     }
     this.stepPlayer(dt)
     this.updateZone()
+    this.updateMotion()
     this.player.animate(dt, this.moveSpeed, elapsed, !!this.options.reducedMotion)
     this.figure?.update(dt, elapsed, !!this.options.reducedMotion)
     this.updateCamera(dt)

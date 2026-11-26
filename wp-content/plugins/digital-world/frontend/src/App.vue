@@ -19,7 +19,7 @@ import GuestBookPage from '@/components/GuestBookPage.vue'
 import NavigatorChat from '@/components/NavigatorChat.vue'
 import ReadingHud from '@/components/ReadingHud.vue'
 import VoiceDock from '@/components/VoiceDock.vue'
-import { announce, canListen, disposeVoice, isEcho, onPhrase, readAloud, stopVoice, voiceReplies } from '@/voice-control'
+import { announce, canListen, disposeVoice, isEcho, onPhrase, readAloud, stopVoice, voiceHold, voiceReplies } from '@/voice-control'
 import { changeVolume } from '@/voice'
 import { bestMatch, createCommandSet, type CommandResult } from '@/commands'
 import { movementCommands } from '@/movement-commands'
@@ -42,6 +42,7 @@ const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matc
 const zone = ref<string | null>(null)
 const entering = ref<string | null>(null)
 const opening = ref(false)
+const sceneMoving = ref(false)
 const hint = ref('')
 const reading = ref<{ url: string; title: string; slug: string | null } | null>(null)
 const atStand = ref(false)
@@ -607,8 +608,20 @@ function runUrgent(text: string) {
   return commands.urgent(text, navigatorContext.value)
 }
 
+const holdReason = computed(() => {
+  if (entering.value || opening.value) {
+    return 'Зачекайте, ще йде перехід. Можна сказати «швидше» або «стоп».'
+  }
+  if (sceneMoving.value) {
+    return 'Ще виконую попередню команду. Зачекайте або скажіть «стоп».'
+  }
+  return null
+})
+
+watch(holdReason, (reason) => (voiceHold.value = Boolean(reason)), { immediate: true })
+
 function transitionRunning() {
-  return Boolean(entering.value || opening.value)
+  return holdReason.value
 }
 
 function namesBuilding(text: string) {
@@ -761,6 +774,7 @@ onMounted(async () => {
         onObjectClick,
         onZoneChange,
         onLink,
+        onMotion: (moving) => (sceneMoving.value = moving),
         onStandZone: (active) => (atStand.value = active),
         onStandLayout: (next) => (standLayout.value = next),
         onIslandSelect: (slug) => (islandSelected.value = slug),

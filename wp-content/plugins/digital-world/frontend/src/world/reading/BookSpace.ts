@@ -99,6 +99,10 @@ export class BookSpace {
     this.pitch = euler.x
   }
 
+  get moving() {
+    return Boolean(this.timeline?.isActive())
+  }
+
   private play(timeline: gsap.core.Timeline) {
     this.timeline?.kill()
     this.timeline = timeline
