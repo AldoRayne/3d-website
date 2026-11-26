@@ -1,0 +1,147 @@
+.dw-island-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 16px;
+  align-items: start;
+  margin-top: 12px;
+}
+
+.dw-island-preview {
+  height: min(72vh, 760px);
+}
+
+.dw-avatar-panel {
+  scroll-margin-top: 48px;
+  padding: 12px 16px 16px;
+  border: 1px solid #c3c4c7;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.dw-avatar-admin__title {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.dw-avatar-admin__preview {
+  margin: 0 0 12px;
+  border-radius: 4px;
+  background: linear-gradient(#cfe9fb, #eef7fd);
+  text-align: center;
+}
+
+.dw-avatar-admin__stage {
+  height: 220px;
+}
+
+.dw-avatar-admin__preview figcaption {
+  padding: 0 8px 8px;
+  color: #50575e;
+  font-weight: 600;
+}
+
+.dw-avatar-editor.is-embedded .dw-avatar-editor__sections {
+  display: grid;
+  gap: 10px;
+}
+
+.dw-avatar-editor.is-embedded .dw-avatar-editor__row {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.dw-avatar-editor.is-embedded .dw-avatar-editor__label {
+  color: #50575e;
+  font-weight: 600;
+}
+
+.dw-avatar-editor.is-embedded .dw-avatar-editor__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dw-avatar-editor.is-embedded .dw-avatar-editor__swatch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: var(--dw-swatch);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+}
+
+.dw-avatar-editor.is-embedded .dw-avatar-editor__swatch.is-active {
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2), 0 0 0 2px #fff, 0 0 0 4px #2271b1;
+}
+
+.dw-avatar-editor.is-embedded .dw-avatar-editor__chip {
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid #c3c4c7;
+  border-radius: 999px;
+  background: #f6f7f7;
+  color: #1d2327;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.dw-avatar-editor.is-embedded .dw-avatar-editor__chip:hover {
+  border-color: #8c8f94;
+}
+
+.dw-avatar-editor.is-embedded .dw-avatar-editor__chip.is-active {
+  border-color: #2271b1;
+  background: #2271b1;
+  color: #fff;
+}
+
+.dw-avatar-editor.is-embedded button:focus-visible {
+  outline: 2px solid #2271b1;
+  outline-offset: 2px;
+}
+
+.dw-avatar-admin__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.dw-avatar-admin__reset {
+  margin-left: auto !important;
+  color: #b32d2e !important;
+}
+
+.dw-avatar-admin__reset:disabled {
+  color: #a7aaad !important;
+}
+
+.dw-avatar-admin__status {
+  margin: 10px 0 0;
+  padding: 6px 10px;
+  border-left: 4px solid;
+  background: #f6f7f7;
+}
+
+.dw-avatar-admin__status.is-saved {
+  border-color: #00a32a;
+}
+
+.dw-avatar-admin__status.is-error {
+  border-color: #d63638;
+}
+
+@media (max-width: 960px) {
+  .dw-island-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .dw-island-preview {
+    height: 60vh;
+  }
+}

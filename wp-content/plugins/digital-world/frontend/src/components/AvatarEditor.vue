@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { AVATAR_OPTIONS, type Avatar, type AvatarKey } from '@/world/avatar'
 import { currentUser } from '@/auth'
 
-const props = defineProps<{ avatar: Avatar; compact?: boolean }>()
+const props = defineProps<{ avatar: Avatar; compact?: boolean; embedded?: boolean }>()
 const emit = defineEmits<{ change: [Avatar] }>()
 
 interface Section {
@@ -71,12 +71,12 @@ function label(section: Section, value: string, index: number) {
 </script>
 
 <template>
-  <div class="dw-avatar-editor" :class="compact ? 'is-compact' : 'dw-bookpage'">
-    <template v-if="!compact">
+  <div class="dw-avatar-editor" :class="compact ? 'is-compact' : embedded ? 'is-embedded' : 'dw-bookpage'">
+    <template v-if="!compact && !embedded">
       <h2 class="dw-auth__title">Мій персонаж</h2>
       <p class="dw-auth__note">{{ currentUser?.name }}, оберіть, яким вас бачать у світі. Персонажа на сторінці можна крутити.</p>
     </template>
-    <div v-else class="dw-avatar-editor__groups" role="tablist" aria-label="Частини персонажа">
+    <div v-else-if="compact" class="dw-avatar-editor__groups" role="tablist" aria-label="Частини персонажа">
       <button
         v-for="group in GROUPS"
         :key="group.id"

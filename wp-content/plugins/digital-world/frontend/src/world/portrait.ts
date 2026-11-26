@@ -55,6 +55,10 @@ export class AvatarPortrait {
     this.renderer.render(this.scene, this.camera)
   }
 
+  setAvatar(avatar: Avatar) {
+    this.player.setAvatar(avatar)
+  }
+
   dispose() {
     cancelAnimationFrame(this.frame)
     this.resizeObserver.disconnect()

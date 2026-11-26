@@ -81,6 +81,10 @@ function digital_world_render_island_page() {
 		'radius'  => digital_world_island_radius(),
 		'layout'  => (object) digital_world_user_layout( $user->ID ),
 		'avatar'  => digital_world_user_avatar( $user->ID ),
+		'restUrl' => esc_url_raw( rest_url( DIGITAL_WORLD_REST_NS ) ),
+		'nonce'   => wp_create_nonce( 'wp_rest' ),
+		'userId'  => $user->ID,
+		'canEdit' => current_user_can( 'edit_user', $user->ID ),
 	);
 	?>
 	<div class="wrap dw-editor-wrap">
@@ -90,20 +94,20 @@ function digital_world_render_island_page() {
 		<hr class="wp-header-end">
 		<p>
 			<?php echo esc_html( digital_world_layout_summary( $user->ID ) ); ?>.
-			Так острів бачить <?php echo esc_html( $user->display_name ); ?>. Тут лише перегляд: обертайте камеру мишею, клік по будинку підсвічує його.
+			Так острів бачить <?php echo esc_html( $user->display_name ); ?>. Острів тут лише для перегляду: обертайте камеру мишею, клік по будинку підсвічує його.
 		</p>
-		<div class="dwe-stage-wrap dw-island-preview">
-			<div id="digital-world-island" class="dwe-stage"></div>
-			<figure class="dw-avatar-preview">
-				<div id="digital-world-avatar" class="dw-avatar-preview__stage"></div>
-				<figcaption><?php echo esc_html( (array) digital_world_user_avatar( $user->ID ) ? 'Персонаж' : 'Персонаж (стандартний)' ); ?></figcaption>
-			</figure>
+		<div class="dw-island-layout">
+			<div class="dwe-stage-wrap dw-island-preview">
+				<div id="digital-world-island" class="dwe-stage"></div>
+			</div>
+			<aside id="dw-avatar" class="dw-avatar-panel" aria-label="Персонаж">
+				<div id="digital-world-avatar-panel"></div>
+			</aside>
 		</div>
 		<?php if ( ! isset( digital_world_manifest()[ DIGITAL_WORLD_ISLAND_ENTRY ] ) ) : ?>
 			<div class="notice notice-error"><p>Превʼю не зібрано. Виконайте <code>npm run build</code> у <code>wp-content/plugins/digital-world/frontend</code>.</p></div>
 		<?php endif; ?>
 	</div>
-	<style>.dw-island-preview{position:relative;height:min(72vh,760px);margin-top:12px}.dw-avatar-preview{position:absolute;top:12px;right:12px;z-index:2;width:160px;margin:0;padding:8px 8px 10px;border-radius:12px;background:rgba(255,255,255,.88);box-shadow:0 6px 20px rgba(0,0,0,.18);text-align:center;font-weight:600}.dw-avatar-preview__stage{height:200px}</style>
 	<script>window.DigitalWorldIsland = <?php echo wp_json_encode( $boot, JSON_HEX_TAG | JSON_HEX_AMP ); ?>;</script>
 	<?php
 }
@@ -243,6 +247,9 @@ if ( class_exists( 'WP_List_Table' ) ) {
 				$actions['edit'] = sprintf( '<a href="%s">Редагувати</a>', esc_url( get_edit_user_link( $user->ID ) ) );
 			}
 			$actions['island'] = sprintf( '<a href="%s">Острів</a>', esc_url( digital_world_island_preview_url( $user->ID ) ) );
+			if ( current_user_can( 'edit_user', $user->ID ) ) {
+				$actions['avatar'] = sprintf( '<a href="%s">Персонаж</a>', esc_url( digital_world_island_preview_url( $user->ID ) . '#dw-avatar' ) );
+			}
 			$actions['visit']  = sprintf(
 				'<a href="%s" target="_blank" rel="noopener">Відвідати<span class="screen-reader-text"> (відкриється в новій вкладці)</span></a>',
 				esc_url( digital_world_visit_url( $user->ID ) )
