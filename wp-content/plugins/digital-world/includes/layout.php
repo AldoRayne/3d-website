@@ -81,7 +81,8 @@ function digital_world_clean_layout( array $layout ) {
 	$radius = digital_world_island_radius();
 	$clean  = array();
 	foreach ( $layout as $slug => $entry ) {
-		if ( ! is_string( $slug ) || ! isset( $known[ $slug ] ) || ! is_array( $entry ) ) {
+		$slug = (string) $slug;
+		if ( '' === $slug || ! isset( $known[ $slug ] ) || ! is_array( $entry ) ) {
 			continue;
 		}
 		$x    = $entry['x'] ?? null;
