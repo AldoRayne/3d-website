@@ -1,26 +1,94 @@
 .dw-island-layout {
+  --dw-stage-h: clamp(480px, calc(100vh - 210px), 820px);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-columns: minmax(0, 1fr) 360px;
   gap: 16px;
-  align-items: start;
+  max-width: 1560px;
   margin-top: 12px;
 }
 
 .dw-island-preview {
-  height: min(72vh, 760px);
+  height: var(--dw-stage-h);
 }
 
-.dw-avatar-panel {
-  scroll-margin-top: 48px;
-  padding: 12px 16px 16px;
+.dw-island-side {
+  display: flex;
+  flex-direction: column;
+  height: var(--dw-stage-h);
+  min-width: 0;
   border: 1px solid #c3c4c7;
   border-radius: 4px;
   background: #fff;
+  overflow: hidden;
 }
 
-.dw-avatar-admin__title {
-  margin: 0 0 8px;
+.dw-island-tabs {
+  display: flex;
+  flex: none;
+  border-bottom: 1px solid #c3c4c7;
+  background: #f6f7f7;
+}
+
+.dw-island-tab {
+  flex: 1;
+  margin-bottom: -1px;
+  padding: 12px 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: #50575e;
   font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dw-island-tab:hover {
+  color: #1d2327;
+}
+
+.dw-island-tab.is-active {
+  border-bottom-color: #2271b1;
+  background: #fff;
+  color: #1d2327;
+}
+
+.dw-island-tab:focus-visible {
+  outline: 2px solid #2271b1;
+  outline-offset: -2px;
+}
+
+.dw-island-pane {
+  flex: 1;
+  min-height: 0;
+  padding: 14px 16px 16px;
+  overflow-y: auto;
+}
+
+.dw-island-pane[hidden] {
+  display: none;
+}
+
+.dw-island-admin__caption {
+  margin: 0 0 10px;
+  color: #50575e;
+  font-weight: 600;
+}
+
+.dw-island-admin__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.dw-island-admin__head .button-link {
+  margin-left: auto;
+}
+
+.dw-island-admin__tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .dw-avatar-admin__preview {
@@ -31,7 +99,7 @@
 }
 
 .dw-avatar-admin__stage {
-  height: 220px;
+  height: 180px;
 }
 
 .dw-avatar-admin__preview figcaption {
@@ -136,6 +204,16 @@
   border-color: #d63638;
 }
 
+.dw-island-pane .dw-avatar-admin__actions {
+  position: sticky;
+  bottom: -16px;
+  z-index: 1;
+  margin: 16px -16px -16px;
+  padding: 12px 16px;
+  border-top: 1px solid #dcdcde;
+  background: #fff;
+}
+
 @media (max-width: 960px) {
   .dw-island-layout {
     grid-template-columns: 1fr;
@@ -143,5 +221,9 @@
 
   .dw-island-preview {
     height: 60vh;
+  }
+
+  .dw-island-side {
+    height: auto;
   }
 }

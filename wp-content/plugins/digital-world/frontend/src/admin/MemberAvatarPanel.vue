@@ -86,7 +86,6 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="dw-avatar-admin">
-    <h2 class="dw-avatar-admin__title">Персонаж</h2>
     <figure class="dw-avatar-admin__preview">
       <div ref="stage" class="dw-avatar-admin__stage"></div>
       <figcaption>{{ caption }}<template v-if="dirty"> · незбережені зміни</template></figcaption>

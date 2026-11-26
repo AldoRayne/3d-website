@@ -1,8 +1,8 @@
 import { createApp } from 'vue'
 import type { Layout, WorldObject } from '@/types'
-import { applyLayout } from '@/world/layout'
-import { WorldEditor } from '@/editor/WorldEditor'
+import type { WorldEditor } from '@/editor/WorldEditor'
 import { resolveAvatar, type Avatar, type AvatarPatch } from '@/world/avatar'
+import MemberIslandPanel from '@/admin/MemberIslandPanel.vue'
 import MemberAvatarPanel from '@/admin/MemberAvatarPanel.vue'
 import './editor/editor.css'
 import './admin/avatar-panel.css'
@@ -24,23 +24,58 @@ declare global {
   }
 }
 
+function setupTabs() {
+  const tabs = [...document.querySelectorAll<HTMLButtonElement>('.dw-island-tab')]
+  const activate = (tab: HTMLButtonElement) => {
+    for (const item of tabs) {
+      const active = item === tab
+      item.classList.toggle('is-active', active)
+      item.setAttribute('aria-selected', String(active))
+      item.tabIndex = active ? 0 : -1
+      const pane = document.getElementById(item.getAttribute('aria-controls') ?? '')
+      if (pane) {
+        pane.hidden = !active
+      }
+    }
+  }
+  tabs.forEach((tab, index) => {
+    tab.addEventListener('click', () => activate(tab))
+    tab.addEventListener('keydown', (event) => {
+      const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
+      if (step) {
+        event.preventDefault()
+        const next = tabs[(index + step + tabs.length) % tabs.length]
+        activate(next)
+        next.focus()
+      }
+    })
+  })
+}
+
+setupTabs()
+
 const boot = window.DigitalWorldIsland
 const stage = document.getElementById('digital-world-island')
-if (boot && stage) {
-  const layout = Array.isArray(boot.layout) ? {} : boot.layout
-  const editor = new WorldEditor(stage, { onSelect: () => {}, onCommit: () => {}, onDragProblem: () => {} }, { readOnly: true })
-  editor.setWorld(applyLayout(boot.objects, layout, boot.radius), boot.radius)
+const islandPanel = document.getElementById('digital-world-island-panel')
+if (boot && stage && islandPanel) {
   const avatar = resolveAvatar(boot.avatar)
-  editor.showPlayer(avatar)
-  const panel = document.getElementById('digital-world-avatar-panel')
-  if (panel) {
+  const api = { restUrl: boot.restUrl, nonce: boot.nonce, userId: boot.userId, canEdit: boot.canEdit }
+  let editor: WorldEditor | null = null
+  createApp(MemberIslandPanel, {
+    ...api,
+    stage,
+    objects: boot.objects,
+    radius: boot.radius,
+    initial: Array.isArray(boot.layout) ? {} : boot.layout,
+    avatar,
+    onReady: (instance: WorldEditor) => (editor = instance),
+  }).mount(islandPanel)
+  const avatarPanel = document.getElementById('digital-world-avatar-panel')
+  if (avatarPanel) {
     createApp(MemberAvatarPanel, {
+      ...api,
       initial: avatar,
-      canEdit: boot.canEdit,
-      restUrl: boot.restUrl,
-      nonce: boot.nonce,
-      userId: boot.userId,
-      onPreview: (next: Avatar) => editor.showPlayer(next),
-    }).mount(panel)
+      onPreview: (next: Avatar) => editor?.showPlayer(next),
+    }).mount(avatarPanel)
   }
 }

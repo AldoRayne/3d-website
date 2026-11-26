@@ -28,7 +28,7 @@ function digital_world_register_members_page() {
 		1
 	);
 	add_action( 'load-' . $hook, 'digital_world_handle_members_bulk' );
-	add_submenu_page( 'edit.php?post_type=' . DIGITAL_WORLD_CPT, 'Острів користувача', '', 'list_users', DIGITAL_WORLD_ISLAND_SLUG, 'digital_world_render_island_page' );
+	add_submenu_page( 'edit.php?post_type=' . DIGITAL_WORLD_CPT, 'Острів і персонаж', '', 'list_users', DIGITAL_WORLD_ISLAND_SLUG, 'digital_world_render_island_page' );
 }
 
 function digital_world_island_preview_url( $user_id ) {
@@ -88,20 +88,26 @@ function digital_world_render_island_page() {
 	);
 	?>
 	<div class="wrap dw-editor-wrap">
-		<h1 class="wp-heading-inline"><?php echo esc_html( sprintf( 'Острів: %s', $user->display_name ) ); ?></h1>
+		<h1 class="wp-heading-inline"><?php echo esc_html( sprintf( 'Острів і персонаж: %s', $user->display_name ) ); ?></h1>
 		<a class="page-title-action" href="<?php echo esc_url( digital_world_visit_url( $user->ID ) ); ?>" target="_blank" rel="noopener">Відвідати острів</a>
 		<a class="page-title-action" href="<?php echo esc_url( digital_world_members_url() ); ?>">До списку</a>
 		<hr class="wp-header-end">
-		<p>
-			<?php echo esc_html( digital_world_layout_summary( $user->ID ) ); ?>.
-			Так острів бачить <?php echo esc_html( $user->display_name ); ?>. Острів тут лише для перегляду: обертайте камеру мишею, клік по будинку підсвічує його.
-		</p>
+		<p>Так острів і персонажа бачить <?php echo esc_html( $user->display_name ); ?>.</p>
 		<div class="dw-island-layout">
 			<div class="dwe-stage-wrap dw-island-preview">
 				<div id="digital-world-island" class="dwe-stage"></div>
 			</div>
-			<aside id="dw-avatar" class="dw-avatar-panel" aria-label="Персонаж">
-				<div id="digital-world-avatar-panel"></div>
+			<aside class="dw-island-side">
+				<div class="dw-island-tabs" role="tablist">
+					<button type="button" class="dw-island-tab is-active" role="tab" id="dw-tab-island" aria-controls="dw-panel-island" aria-selected="true">Острів</button>
+					<button type="button" class="dw-island-tab" role="tab" id="dw-tab-avatar" aria-controls="dw-panel-avatar" aria-selected="false" tabindex="-1">Персонаж</button>
+				</div>
+				<section class="dw-island-pane" role="tabpanel" id="dw-panel-island" aria-labelledby="dw-tab-island">
+					<div id="digital-world-island-panel"></div>
+				</section>
+				<section class="dw-island-pane" role="tabpanel" id="dw-panel-avatar" aria-labelledby="dw-tab-avatar" hidden>
+					<div id="digital-world-avatar-panel"></div>
+				</section>
 			</aside>
 		</div>
 		<?php if ( ! isset( digital_world_manifest()[ DIGITAL_WORLD_ISLAND_ENTRY ] ) ) : ?>
@@ -246,10 +252,11 @@ if ( class_exists( 'WP_List_Table' ) ) {
 			if ( current_user_can( 'edit_user', $user->ID ) ) {
 				$actions['edit'] = sprintf( '<a href="%s">Редагувати</a>', esc_url( get_edit_user_link( $user->ID ) ) );
 			}
-			$actions['island'] = sprintf( '<a href="%s">Острів</a>', esc_url( digital_world_island_preview_url( $user->ID ) ) );
-			if ( current_user_can( 'edit_user', $user->ID ) ) {
-				$actions['avatar'] = sprintf( '<a href="%s">Персонаж</a>', esc_url( digital_world_island_preview_url( $user->ID ) . '#dw-avatar' ) );
-			}
+			$actions['island'] = sprintf(
+				'<a href="%s">%s</a>',
+				esc_url( digital_world_island_preview_url( $user->ID ) ),
+				current_user_can( 'edit_user', $user->ID ) ? 'Острів і персонаж' : 'Острів'
+			);
 			$actions['visit']  = sprintf(
 				'<a href="%s" target="_blank" rel="noopener">Відвідати<span class="screen-reader-text"> (відкриється в новій вкладці)</span></a>',
 				esc_url( digital_world_visit_url( $user->ID ) )
