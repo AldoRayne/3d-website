@@ -44,7 +44,7 @@ function digital_world_register_avatar_routes() {
 			array(
 				'methods'             => WP_REST_Server::EDITABLE,
 				'callback'            => 'digital_world_rest_save_member_avatar',
-				'permission_callback' => 'digital_world_member_avatar_permission',
+				'permission_callback' => 'digital_world_member_edit_permission',
 				'args'                => array(
 					'avatar' => array(
 						'type'     => 'object',
@@ -55,7 +55,7 @@ function digital_world_register_avatar_routes() {
 			array(
 				'methods'             => WP_REST_Server::DELETABLE,
 				'callback'            => 'digital_world_rest_reset_member_avatar',
-				'permission_callback' => 'digital_world_member_avatar_permission',
+				'permission_callback' => 'digital_world_member_edit_permission',
 			),
 		)
 	);
@@ -79,7 +79,7 @@ function digital_world_avatar_permission( WP_REST_Request $request ) {
 		: new WP_Error( 'digital_world_not_signed_in', 'Увійдіть, щоб змінювати персонажа.', array( 'status' => 401 ) );
 }
 
-function digital_world_member_avatar_permission( WP_REST_Request $request ) {
+function digital_world_member_edit_permission( WP_REST_Request $request ) {
 	if ( ! digital_world_has_valid_nonce( $request ) ) {
 		return new WP_Error( 'digital_world_bad_nonce', 'Сесія застаріла. Оновіть сторінку.', array( 'status' => 403 ) );
 	}

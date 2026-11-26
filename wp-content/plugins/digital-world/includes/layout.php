@@ -38,6 +38,28 @@ function digital_world_register_layout_routes() {
 			),
 		)
 	);
+	register_rest_route(
+		DIGITAL_WORLD_REST_NS,
+		'/members/(?P<id>\\d+)/layout',
+		array(
+			array(
+				'methods'             => WP_REST_Server::EDITABLE,
+				'callback'            => 'digital_world_rest_save_member_layout',
+				'permission_callback' => 'digital_world_member_edit_permission',
+				'args'                => array(
+					'layout' => array(
+						'type'     => 'object',
+						'required' => true,
+					),
+				),
+			),
+			array(
+				'methods'             => WP_REST_Server::DELETABLE,
+				'callback'            => 'digital_world_rest_reset_member_layout',
+				'permission_callback' => 'digital_world_member_edit_permission',
+			),
+		)
+	);
 }
 
 function digital_world_layout_permission( WP_REST_Request $request ) {
@@ -103,17 +125,12 @@ function digital_world_rest_get_layout() {
 	return digital_world_layout_response( get_current_user_id() );
 }
 
-function digital_world_rest_save_layout( WP_REST_Request $request ) {
-	[ $limit, $window ] = DIGITAL_WORLD_LAYOUT_LIMIT;
-	if ( ! digital_world_take_rate_slot( 'layout', $limit, $window ) ) {
-		return new WP_Error( 'digital_world_rate_limited', 'Забагато змін. Спробуйте трохи пізніше.', array( 'status' => 429 ) );
-	}
-	$layout = (array) $request->get_param( 'layout' );
+function digital_world_store_layout( $user_id, $layout ) {
+	$layout = (array) $layout;
 	$clean  = digital_world_clean_layout( $layout );
 	if ( count( $clean ) !== count( $layout ) ) {
 		return new WP_Error( 'digital_world_bad_layout', 'Розкладка містить невідомі будинки або місця поза островом.', array( 'status' => 422 ) );
 	}
-	$user_id = get_current_user_id();
 	if ( $clean ) {
 		update_user_meta( $user_id, DIGITAL_WORLD_LAYOUT_META, $clean );
 	} else {
@@ -122,8 +139,26 @@ function digital_world_rest_save_layout( WP_REST_Request $request ) {
 	return digital_world_layout_response( $user_id );
 }
 
+function digital_world_rest_save_layout( WP_REST_Request $request ) {
+	[ $limit, $window ] = DIGITAL_WORLD_LAYOUT_LIMIT;
+	if ( ! digital_world_take_rate_slot( 'layout', $limit, $window ) ) {
+		return new WP_Error( 'digital_world_rate_limited', 'Забагато змін. Спробуйте трохи пізніше.', array( 'status' => 429 ) );
+	}
+	return digital_world_store_layout( get_current_user_id(), $request->get_param( 'layout' ) );
+}
+
 function digital_world_rest_reset_layout() {
 	$user_id = get_current_user_id();
+	delete_user_meta( $user_id, DIGITAL_WORLD_LAYOUT_META );
+	return digital_world_layout_response( $user_id );
+}
+
+function digital_world_rest_save_member_layout( WP_REST_Request $request ) {
+	return digital_world_store_layout( (int) $request['id'], $request->get_param( 'layout' ) );
+}
+
+function digital_world_rest_reset_member_layout( WP_REST_Request $request ) {
+	$user_id = (int) $request['id'];
 	delete_user_meta( $user_id, DIGITAL_WORLD_LAYOUT_META );
 	return digital_world_layout_response( $user_id );
 }
