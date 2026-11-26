@@ -900,7 +900,6 @@ onBeforeUnmount(() => {
       :touch="touch"
       @exit="exitReading()"
       @read="scene?.readHere()"
-      @top="scene?.readTop()"
       @page="openRegularPage"
     />
 

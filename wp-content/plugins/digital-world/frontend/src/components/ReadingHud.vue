@@ -2,7 +2,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 defineProps<{ title: string; touch: boolean }>()
-const emit = defineEmits<{ exit: []; read: []; top: []; page: [] }>()
+const emit = defineEmits<{ exit: []; read: []; page: [] }>()
 const showHelp = ref(true)
 let timer = 0
 
@@ -22,7 +22,6 @@ onBeforeUnmount(() => window.clearTimeout(timer))
       <p class="dw-reading__title">{{ title }}</p>
       <div class="dw-reading__actions">
         <button type="button" class="dw-reading__button" @click="emit('read')">Читати</button>
-        <button type="button" class="dw-reading__button" @click="emit('top')">На початок</button>
         <button type="button" class="dw-reading__button is-primary" @click="emit('page')">Звичайна сторінка</button>
       </div>
     </header>
