@@ -43,6 +43,19 @@ const zone = ref<string | null>(null)
 const entering = ref<string | null>(null)
 const opening = ref(false)
 const sceneMoving = ref(false)
+const side = ref<HTMLElement | null>(null)
+const reservedRight = ref(0)
+const SIDE_BREAKPOINT = 900
+const SIDE_GAP = 16
+
+function reserveSide() {
+  const element = side.value
+  const reserved = element && window.innerWidth > SIDE_BREAKPOINT ? window.innerWidth - element.getBoundingClientRect().left + SIDE_GAP : 0
+  reservedRight.value = Math.round(reserved)
+  scene.value?.setReservedRight(reserved)
+}
+
+watch([side, scene], reserveSide, { flush: 'post' })
 const hint = ref('')
 const reading = ref<{ url: string; title: string; slug: string | null } | null>(null)
 const atStand = ref(false)
@@ -759,6 +772,7 @@ onMounted(async () => {
     return chat.value?.ask(text, true) ?? Promise.resolve(null)
   })
   window.addEventListener('keydown', onKeydown)
+  window.addEventListener('resize', reserveSide)
   window.addEventListener('pageshow', onPageShow)
   window.addEventListener('popstate', onPopState)
   try {
@@ -818,6 +832,7 @@ onBeforeUnmount(() => {
   onPhrase(null)
   disposeVoice()
   window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('resize', reserveSide)
   window.removeEventListener('pageshow', onPageShow)
   window.removeEventListener('popstate', onPopState)
   window.clearTimeout(hintTimer)
@@ -826,7 +841,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="dw-app" :class="{ 'is-static': !webgl, 'is-entering': entering || reading || bookOpen }">
+  <div class="dw-app" :class="{ 'is-static': !webgl, 'is-entering': entering || reading || bookOpen, 'is-book': bookOpen && !entering && !reading }" :style="{ '--dw-reserved-right': `${reservedRight}px` }">
     <div v-if="webgl" ref="stage" class="dw-stage" aria-hidden="true" />
 
     <div v-if="visit" class="dw-visit" role="status">
@@ -856,7 +871,7 @@ onBeforeUnmount(() => {
       @overview="scene?.overview()"
     />
 
-    <div v-if="webgl && objects.length" class="dw-side">
+    <div v-if="webgl && objects.length" ref="side" class="dw-side">
       <div class="dw-hud">
         <p v-if="hint" class="dw-hint" role="status">{{ hint }}</p>
       </div>
@@ -906,7 +921,7 @@ onBeforeUnmount(() => {
       <AvatarEditor v-if="avatarShown && !standLayout.left" compact :avatar="avatar" @change="onAvatarChange" />
     </IslandToolbar>
 
-    <VoiceDock v-if="canListen && webgl && objects.length && (entering || reading || bookOpen)" />
+    <VoiceDock v-if="canListen && webgl && objects.length && (entering || reading)" />
 
     <ReadingHud
       v-if="reading"

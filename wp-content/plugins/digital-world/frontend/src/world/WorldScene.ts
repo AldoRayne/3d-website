@@ -182,6 +182,7 @@ export class WorldScene {
   private locked = false
   private moving = false
   private pageLoads = 0
+  private reservedRight = 0
   private timeline: gsap.core.Timeline | null = null
   private moveSpeed = 0
   private shadows: boolean
@@ -846,17 +847,42 @@ export class WorldScene {
   }
 
   private get standSpread() {
-    return this.camera.aspect >= STAND_SPREAD_MIN_ASPECT
+    return this.standAspect >= STAND_SPREAD_MIN_ASPECT
+  }
+
+  private get standFree() {
+    const width = this.renderer.domElement.clientWidth || window.innerWidth
+    return THREE.MathUtils.clamp(1 - this.reservedRight / width, 0.4, 1)
+  }
+
+  private get standAspect() {
+    return this.camera.aspect * this.standFree
+  }
+
+  setReservedRight(pixels: number) {
+    this.reservedRight = Math.max(0, pixels)
   }
 
   private standPose() {
+    const pose = this.centeredStandPose()
+    const shift = 1 - this.standFree
+    if (shift <= 0) {
+      return pose
+    }
+    const tan = Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)
+    const offset = pose.position.distanceTo(pose.center) * tan * this.camera.aspect * shift
+    const right = new THREE.Vector3().crossVectors(pose.center.clone().sub(pose.position), UP).normalize().multiplyScalar(offset)
+    return { position: pose.position.add(right), center: pose.center.add(right) }
+  }
+
+  private centeredStandPose() {
     const { book } = this.model.stand
     const corners = book.pageCorners(this.standSpread ? 'spread' : 'right')
     const center = corners.reduce((sum, corner) => sum.add(corner), new THREE.Vector3()).multiplyScalar(0.25)
     const width = corners[0].distanceTo(corners[1])
     const height = corners[1].distanceTo(corners[2])
     const tan = Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)
-    const distance = Math.max(height / 2 / tan, width / 2 / (tan * this.camera.aspect)) / STAND_COVERAGE
+    const distance = Math.max(height / 2 / tan, width / 2 / (tan * this.standAspect)) / STAND_COVERAGE
     const flat = { position: center.clone().addScaledVector(book.normal(), distance), center }
     if (!this.island || this.islandTilt <= 0) {
       return flat
@@ -881,7 +907,7 @@ export class WorldScene {
     const size = Math.min(book.pageWidth, book.pageHeight) * 0.95
     const width = spread ? corners[0].distanceTo(corners[1]) * 0.86 : size
     const tan = Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)
-    const distance = Math.max(size / 2 / tan, width / 2 / (tan * this.camera.aspect)) * 1.15
+    const distance = Math.max(size / 2 / tan, width / 2 / (tan * this.standAspect)) * 1.15
     return { position: center.clone().addScaledVector(direction, distance), center }
   }
 

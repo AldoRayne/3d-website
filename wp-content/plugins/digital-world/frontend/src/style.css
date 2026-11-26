@@ -840,7 +840,7 @@ kbd {
 
 .dw-app.is-entering .dw-topbar,
 .dw-app.is-entering .dw-list,
-.dw-app.is-entering .dw-side,
+.dw-app.is-entering:not(.is-book) .dw-side,
 .dw-app.is-entering .dw-labels {
   visibility: hidden;
   opacity: 0;
@@ -1536,7 +1536,7 @@ kbd {
 
 .dw-island-bar {
   position: fixed;
-  left: 50%;
+  left: calc((100vw - var(--dw-reserved-right, 0px)) / 2);
   bottom: max(16px, env(safe-area-inset-bottom));
   z-index: 31;
   display: flex;
@@ -1545,7 +1545,7 @@ kbd {
   justify-content: center;
   gap: 8px;
   width: max-content;
-  max-width: calc(100vw - 32px);
+  max-width: calc(100vw - var(--dw-reserved-right, 0px) - 32px);
   padding: 10px 12px;
   transform: translateX(-50%);
   background: var(--dw-surface-strong);
@@ -1687,4 +1687,9 @@ kbd {
     bottom: 96px;
     border-radius: 16px;
   }
+}
+
+.dw-app.is-book .dw-hud {
+  left: calc((100vw - var(--dw-reserved-right, 0px)) / 2);
+  max-width: min(460px, calc(100vw - var(--dw-reserved-right, 0px) - 2 * var(--dw-gutter)));
 }
