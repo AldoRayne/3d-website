@@ -99,6 +99,7 @@ export function isEcho(text: string) {
 
 function say(text: string) {
   spokenText = text
+  session?.cancel()
   speak(text)
 }
 
@@ -148,7 +149,6 @@ export function readAloud(text: string) {
   if (!canSpeak.value) {
     return false
   }
-  session?.cancel()
   say(text)
   return true
 }
@@ -159,7 +159,6 @@ export function announce(text: string) {
   }
   lastReply.value = text
   if (voiceReplies.value && !voiceBusy.value) {
-    session?.cancel()
     say(text)
   }
 }
@@ -174,6 +173,10 @@ function startCapture() {
       heard.value = text
     },
     done: (text) => {
+      if (speaking.value) {
+        heard.value = ''
+        return
+      }
       void dispatch(text)
     },
     error: (error) => {
