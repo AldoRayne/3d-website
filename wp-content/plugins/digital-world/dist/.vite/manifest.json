@@ -1,13 +1,13 @@
 {
-  "_AvatarEditor-B7_gQkTz.js": {
-    "file": "assets/AvatarEditor-B7_gQkTz.js",
+  "_AvatarEditor-D0jsMmee.js": {
+    "file": "assets/AvatarEditor-D0jsMmee.js",
     "name": "AvatarEditor",
     "imports": [
-      "_WorldModel-D8NgwIT2.js"
+      "_WorldModel-BLwxzqC6.js"
     ]
   },
-  "_WorldModel-D8NgwIT2.js": {
-    "file": "assets/WorldModel-D8NgwIT2.js",
+  "_WorldModel-BLwxzqC6.js": {
+    "file": "assets/WorldModel-BLwxzqC6.js",
     "name": "WorldModel",
     "imports": [
       "_buildings-Cn1pCzGo.js"
@@ -20,15 +20,11 @@
     "file": "assets/buildings-Cn1pCzGo.js",
     "name": "buildings"
   },
-  "_dom-_8vR8oBM.js": {
-    "file": "assets/dom-_8vR8oBM.js",
-    "name": "dom"
-  },
-  "_editor-CCm1GCfJ.js": {
-    "file": "assets/editor-CCm1GCfJ.js",
+  "_editor-DOZo8RQ9.js": {
+    "file": "assets/editor-DOZo8RQ9.js",
     "name": "editor",
     "imports": [
-      "_WorldModel-D8NgwIT2.js"
+      "_WorldModel-BLwxzqC6.js"
     ],
     "css": [
       "assets/editor-DQnJkZiG.css"
@@ -49,16 +45,15 @@
     "isDynamicEntry": true
   },
   "src/admin.ts": {
-    "file": "assets/admin-dVge_oWh.js",
+    "file": "assets/admin-B6_e6I23.js",
     "name": "admin",
     "src": "src/admin.ts",
     "isEntry": true,
     "imports": [
-      "_WorldModel-D8NgwIT2.js",
+      "_WorldModel-BLwxzqC6.js",
       "_buildings-Cn1pCzGo.js",
       "_preview-CDxcuptg.js",
-      "_dom-_8vR8oBM.js",
-      "_editor-CCm1GCfJ.js"
+      "_editor-DOZo8RQ9.js"
     ]
   },
   "src/assets/fonts/manrope-300.json": {
@@ -87,28 +82,27 @@
     ]
   },
   "src/island-preview.ts": {
-    "file": "assets/island-1sjw3z88.js",
+    "file": "assets/island-DN8vO9a0.js",
     "name": "island",
     "src": "src/island-preview.ts",
     "isEntry": true,
     "imports": [
-      "_WorldModel-D8NgwIT2.js",
-      "_AvatarEditor-B7_gQkTz.js",
-      "_editor-CCm1GCfJ.js"
+      "_WorldModel-BLwxzqC6.js",
+      "_AvatarEditor-D0jsMmee.js",
+      "_editor-DOZo8RQ9.js"
     ],
     "css": [
-      "assets/island-_VO3rvpy.css"
+      "assets/island-C8paxQhw.css"
     ]
   },
   "src/main.ts": {
-    "file": "assets/main-BxlsIQYp.js",
+    "file": "assets/main-DQ1ghgac.js",
     "name": "main",
     "src": "src/main.ts",
     "isEntry": true,
     "imports": [
-      "_WorldModel-D8NgwIT2.js",
-      "_AvatarEditor-B7_gQkTz.js",
-      "_dom-_8vR8oBM.js",
+      "_WorldModel-BLwxzqC6.js",
+      "_AvatarEditor-D0jsMmee.js",
       "_buildings-Cn1pCzGo.js"
     ],
     "css": [
