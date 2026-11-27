@@ -5,10 +5,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 const DIGITAL_WORLD_REST_NS       = 'digital-world/v1';
-const DIGITAL_WORLD_MAX_MESSAGE   = 500;
-const DIGITAL_WORLD_MAX_HISTORY   = 6;
-const DIGITAL_WORLD_RATE_LIMIT    = 20;
-const DIGITAL_WORLD_RATE_WINDOW_S = 60;
+// AI-NAVIGATOR-OFF const DIGITAL_WORLD_MAX_MESSAGE   = 500;
+// AI-NAVIGATOR-OFF const DIGITAL_WORLD_MAX_HISTORY   = 6;
+// AI-NAVIGATOR-OFF const DIGITAL_WORLD_RATE_LIMIT    = 20;
+// AI-NAVIGATOR-OFF const DIGITAL_WORLD_RATE_WINDOW_S = 60;
 
 add_action( 'rest_api_init', 'digital_world_register_routes' );
 
@@ -23,6 +23,7 @@ function digital_world_register_routes() {
 		)
 	);
 
+	/* AI-NAVIGATOR-OFF
 	register_rest_route(
 		DIGITAL_WORLD_REST_NS,
 		'/navigate',
@@ -61,6 +62,7 @@ function digital_world_register_routes() {
 			),
 		)
 	);
+	AI-NAVIGATOR-OFF */
 
 	register_rest_route(
 		DIGITAL_WORLD_REST_NS,
@@ -122,7 +124,7 @@ function digital_world_world_payload() {
 			'name' => get_bloginfo( 'name' ),
 			'home' => home_url( '/' ),
 		),
-		'ai'      => digital_world_ai_provider(),
+		// AI-NAVIGATOR-OFF 'ai'      => digital_world_ai_provider(),
 		'island'  => array( 'radius' => digital_world_island_radius() ),
 		'objects' => digital_world_get_objects(),
 	);
@@ -132,6 +134,7 @@ function digital_world_rest_world() {
 	return rest_ensure_response( digital_world_world_payload() );
 }
 
+/* AI-NAVIGATOR-OFF
 function digital_world_rest_navigate_permission( WP_REST_Request $request ) {
 	if ( ! digital_world_has_valid_nonce( $request ) ) {
 		return new WP_Error( 'digital_world_bad_nonce', 'Invalid or missing nonce.', array( 'status' => 403 ) );
@@ -182,6 +185,7 @@ function digital_world_rest_navigate( WP_REST_Request $request ) {
 
 	return rest_ensure_response( digital_world_navigate( $message, $history, is_array( $context ) ? $context : array() ) );
 }
+AI-NAVIGATOR-OFF */
 
 function digital_world_rest_can_edit() {
 	return current_user_can( 'manage_options' );

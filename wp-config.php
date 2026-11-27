@@ -14,7 +14,7 @@ defined( 'WP_ENVIRONMENT_TYPE' ) || define( 'WP_ENVIRONMENT_TYPE', 'production' 
 defined( 'WP_DEBUG' ) || define( 'WP_DEBUG', false );
 defined( 'WP_DEBUG_LOG' ) || define( 'WP_DEBUG_LOG', WP_DEBUG );
 defined( 'WP_DEBUG_DISPLAY' ) || define( 'WP_DEBUG_DISPLAY', false );
-defined( 'DIGITAL_WORLD_ANTHROPIC_API_KEY' ) || define( 'DIGITAL_WORLD_ANTHROPIC_API_KEY', getenv( 'ANTHROPIC_API_KEY' ) ?: '' );
+// AI-NAVIGATOR-OFF defined( 'DIGITAL_WORLD_ANTHROPIC_API_KEY' ) || define( 'DIGITAL_WORLD_ANTHROPIC_API_KEY', getenv( 'ANTHROPIC_API_KEY' ) ?: '' );
 
 define( 'WP_CONTENT_DIR', __DIR__ . '/wp-content' );
 define( 'WP_CONTENT_URL', WP_HOME . '/wp-content' );

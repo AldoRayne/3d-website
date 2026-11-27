@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { boot, fetchWorld } from '@/api'
-import type { CameraTransition, Layout, NavigatorCommand, NavigatorContext, WorldObject } from '@/types'
+// AI-NAVIGATOR-OFF import type { CameraTransition, Layout, NavigatorCommand, NavigatorContext, WorldObject } from '@/types'
+import type { CameraTransition, Layout, WorldObject } from '@/types'
 import { isEditableTarget, isWebGLAvailable, WorldScene, type StandLayout } from '@/world/WorldScene'
 import { STAND_SLUG } from '@/world/stand'
 import { authConfig, currentUser, logout, resetAvatar, resetLayout, saveAvatar, saveLayout } from '@/auth'
@@ -16,24 +17,24 @@ import DoorCard from '@/components/DoorCard.vue'
 import StandCard from '@/components/StandCard.vue'
 import GuestBook from '@/components/GuestBook.vue'
 import GuestBookPage from '@/components/GuestBookPage.vue'
-import NavigatorChat from '@/components/NavigatorChat.vue'
+// AI-NAVIGATOR-OFF import NavigatorChat from '@/components/NavigatorChat.vue'
 import ReadingHud from '@/components/ReadingHud.vue'
-import VoiceDock from '@/components/VoiceDock.vue'
-import { announce, canListen, disposeVoice, isEcho, onPhrase, readAloud, stopVoice, voiceHold, voiceReplies } from '@/voice-control'
-import { changeVolume } from '@/voice'
-import { bestMatch, createCommandSet, type CommandResult } from '@/commands'
-import { movementCommands } from '@/movement-commands'
-import { voiceCommands } from '@/voice-commands'
+// AI-NAVIGATOR-OFF import VoiceDock from '@/components/VoiceDock.vue'
+// AI-NAVIGATOR-OFF import { announce, canListen, disposeVoice, isEcho, onPhrase, readAloud, stopVoice, voiceHold, voiceReplies } from '@/voice-control'
+// AI-NAVIGATOR-OFF import { changeVolume } from '@/voice'
+// AI-NAVIGATOR-OFF import { bestMatch, createCommandSet, type CommandResult } from '@/commands'
+// AI-NAVIGATOR-OFF import { movementCommands } from '@/movement-commands'
+// AI-NAVIGATOR-OFF import { voiceCommands } from '@/voice-commands'
 
 const LAST_DOOR_KEY = 'dw-last-door'
 
 const stage = ref<HTMLElement | null>(null)
-const chat = ref<InstanceType<typeof NavigatorChat> | null>(null)
+// AI-NAVIGATOR-OFF const chat = ref<InstanceType<typeof NavigatorChat> | null>(null)
 const scene = shallowRef<WorldScene | null>(null)
 const objects = ref<WorldObject[]>([])
 const siteName = ref(boot.siteName)
 const homeUrl = ref(boot.homeUrl)
-const aiProvider = ref(boot.ai)
+// AI-NAVIGATOR-OFF const aiProvider = ref(boot.ai)
 const loading = ref(true)
 const error = ref('')
 const webgl = isWebGLAvailable()
@@ -483,6 +484,7 @@ function walkTo(slug: string, transition: CameraTransition = 'fly') {
   return scene.value?.walkTo(slug, transition)
 }
 
+/* AI-NAVIGATOR-OFF
 const navigatorContext = computed<NavigatorContext>(() => ({
   screen: entering.value || opening.value ? 'entering' : reading.value ? 'reading' : bookOpen.value ? 'book' : 'world',
   bookPage: bookOpen.value ? (memberPage.value || pageTurning.value ? bookPage.value : 'guest') : null,
@@ -709,6 +711,7 @@ async function runCommand(command: NavigatorCommand): Promise<CommandResult | nu
   }
   return done
 }
+AI-NAVIGATOR-OFF */
 
 function restoreAtDoor(slug: string | null) {
   entering.value = null
@@ -765,12 +768,12 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 onMounted(async () => {
-  onPhrase((text) => {
-    if (isEcho(text) && !commands.match(text, navigatorContext.value) && !namesBuilding(text)) {
-      return Promise.resolve(null)
-    }
-    return chat.value?.ask(text, true) ?? Promise.resolve(null)
-  })
+  // AI-NAVIGATOR-OFF onPhrase((text) => {
+    // AI-NAVIGATOR-OFF if (isEcho(text) && !commands.match(text, navigatorContext.value) && !namesBuilding(text)) {
+      // AI-NAVIGATOR-OFF return Promise.resolve(null)
+    // AI-NAVIGATOR-OFF }
+    // AI-NAVIGATOR-OFF return chat.value?.ask(text, true) ?? Promise.resolve(null)
+  // AI-NAVIGATOR-OFF })
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('resize', reserveSide)
   window.addEventListener('pageshow', onPageShow)
@@ -781,7 +784,7 @@ onMounted(async () => {
     radius.value = world.island.radius
     siteName.value = world.site.name
     homeUrl.value = world.site.home
-    aiProvider.value = world.ai
+    // AI-NAVIGATOR-OFF aiProvider.value = world.ai
     if (webgl && stage.value) {
       scene.value = new WorldScene(stage.value, {
         reducedMotion,
@@ -796,7 +799,7 @@ onMounted(async () => {
         onIslandChange,
         onBlocked: () => {
           showHint('Далі не пройти')
-          announce('Далі не пройти.')
+          // AI-NAVIGATOR-OFF announce('Далі не пройти.')
         },
         avatar: worldAvatar(),
       })
@@ -829,8 +832,8 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  onPhrase(null)
-  disposeVoice()
+  // AI-NAVIGATOR-OFF onPhrase(null)
+  // AI-NAVIGATOR-OFF disposeVoice()
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('resize', reserveSide)
   window.removeEventListener('pageshow', onPageShow)
@@ -877,7 +880,7 @@ onBeforeUnmount(() => {
       </div>
       <DoorCard v-if="zoneObject" :object="zoneObject" :touch="touch" @enter="enter(zoneObject.slug)" />
       <StandCard v-else-if="showStandCard" :touch="touch" :visiting="!!visit" @open="openBook" />
-      <NavigatorChat ref="chat" :provider="aiProvider" :context="contextForNavigator" :local="runLocal" :execute="runCommand" :urgent="runUrgent" :blocked="transitionRunning" />
+      <!-- AI-NAVIGATOR-OFF <NavigatorChat ref="chat" :provider="aiProvider" :context="contextForNavigator" :local="runLocal" :execute="runCommand" :urgent="runUrgent" :blocked="transitionRunning" /> -->
     </div>
 
     <GuestBook v-if="standLayout" :layout="standLayout" :passthrough="memberPage" :print-left="memberPage" @close="closeBook">
@@ -921,7 +924,7 @@ onBeforeUnmount(() => {
       <AvatarEditor v-if="avatarShown && !standLayout.left" compact :avatar="avatar" @change="onAvatarChange" />
     </IslandToolbar>
 
-    <VoiceDock v-if="canListen && webgl && objects.length && (entering || reading)" />
+    <!-- AI-NAVIGATOR-OFF <VoiceDock v-if="canListen && webgl && objects.length && (entering || reading)" /> -->
 
     <ReadingHud
       v-if="reading"

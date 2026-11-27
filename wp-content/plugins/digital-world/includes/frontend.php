@@ -45,7 +45,7 @@ function digital_world_boot_data() {
 		'nonce'    => wp_create_nonce( 'wp_rest' ),
 		'homeUrl'  => home_url( '/' ),
 		'siteName' => get_bloginfo( 'name' ),
-		'ai'       => digital_world_ai_provider(),
+		// AI-NAVIGATOR-OFF 'ai'       => digital_world_ai_provider(),
 		'world'    => digital_world_world_payload(),
 		'auth'     => digital_world_auth_boot_data(),
 		'visit'    => digital_world_visit_boot(),

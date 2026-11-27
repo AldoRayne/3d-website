@@ -19,19 +19,19 @@ define( 'WP_HOME', 'http://localhost' );
 define( 'WP_ENVIRONMENT_TYPE', 'local' );
 define( 'WP_DEBUG', true );
 
-define( 'DIGITAL_WORLD_ANTHROPIC_API_KEY', '' );
+// AI-NAVIGATOR-OFF define( 'DIGITAL_WORLD_ANTHROPIC_API_KEY', '' );
 
-// Providers are tried in order: Anthropic, Ollama, OpenAI, Gemini. Empty key skips the provider.
+// AI-NAVIGATOR-OFF // Providers are tried in order: Anthropic, Ollama, OpenAI, Gemini. Empty key skips the provider.
 
-// Local Ollama (http://localhost:11434), no key; the model name enables it, e.g. 'qwen3.5:4b-q4_K_M' (nvfp4 tags lack structured output).
-define( 'DIGITAL_WORLD_OLLAMA_MODEL', '' );
+// AI-NAVIGATOR-OFF // Local Ollama (http://localhost:11434), no key; the model name enables it, e.g. 'qwen3.5:4b-q4_K_M' (nvfp4 tags lack structured output).
+// AI-NAVIGATOR-OFF define( 'DIGITAL_WORLD_OLLAMA_MODEL', '' );
 
-define( 'DIGITAL_WORLD_OPENAI_API_KEY', '' );
-define( 'DIGITAL_WORLD_OPENAI_MODEL', '' );
+// AI-NAVIGATOR-OFF define( 'DIGITAL_WORLD_OPENAI_API_KEY', '' );
+// AI-NAVIGATOR-OFF define( 'DIGITAL_WORLD_OPENAI_MODEL', '' );
 
-// Gemini API key from https://aistudio.google.com/apikey (free tier available).
-define( 'DIGITAL_WORLD_GEMINI_API_KEY', '' );
-define( 'DIGITAL_WORLD_GEMINI_MODEL', '' );
+// AI-NAVIGATOR-OFF // Gemini API key from https://aistudio.google.com/apikey (free tier available).
+// AI-NAVIGATOR-OFF define( 'DIGITAL_WORLD_GEMINI_API_KEY', '' );
+// AI-NAVIGATOR-OFF define( 'DIGITAL_WORLD_GEMINI_MODEL', '' );
 
 // Cloudflare Turnstile. Locally — the official test keys (always pass).
 // Always fail: site 2x00000000000000000000AB, secret 2x0000000000000000000000000000000AA.

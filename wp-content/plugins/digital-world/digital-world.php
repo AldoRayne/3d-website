@@ -19,7 +19,7 @@ define( 'DIGITAL_WORLD_URL', plugin_dir_url( __FILE__ ) );
 
 require_once DIGITAL_WORLD_DIR . 'includes/post-type.php';
 require_once DIGITAL_WORLD_DIR . 'includes/world.php';
-require_once DIGITAL_WORLD_DIR . 'includes/navigator.php';
+// AI-NAVIGATOR-OFF require_once DIGITAL_WORLD_DIR . 'includes/navigator.php';
 require_once DIGITAL_WORLD_DIR . 'includes/rest.php';
 require_once DIGITAL_WORLD_DIR . 'includes/auth.php';
 require_once DIGITAL_WORLD_DIR . 'includes/layout.php';
