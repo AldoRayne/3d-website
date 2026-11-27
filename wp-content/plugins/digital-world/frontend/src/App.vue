@@ -5,8 +5,9 @@ import { boot, fetchWorld } from '@/api'
 import type { CameraTransition, Layout, WorldObject } from '@/types'
 import { isEditableTarget, isWebGLAvailable, WorldScene, type StandLayout } from '@/world/WorldScene'
 import { STAND_SLUG } from '@/world/stand'
-import { authConfig, currentUser, logout, resetAvatar, resetLayout, saveAvatar, saveLayout } from '@/auth'
-import { resolveAvatar, sameAvatar, type Avatar } from '@/world/avatar'
+import { authConfig, currentUser, inviteLink, logout, renewInviteLink, resetAvatar, resetLayout, saveAvatar, saveLayout } from '@/auth'
+import { avatarDiff, resolveAvatar, sameAvatar, type Avatar } from '@/world/avatar'
+import { Presence, type PeerState } from '@/presence'
 import { applyLayout, layoutDiff } from '@/world/layout'
 import type { Placement, PlacementProblem } from '@/world/WorldModel'
 import IslandToolbar from '@/components/IslandToolbar.vue'
@@ -84,8 +85,8 @@ let pendingAvatar: Promise<void> | null = null
 let hintTimer = 0
 
 const visit = boot.visit ?? null
-const visitLayout: Layout = visit && !Array.isArray(visit.layout) ? visit.layout : {}
-const worldAvatar = () => (visit ? resolveAvatar(visit.avatar) : avatar.value)
+let visitLayout: Layout = visit && !Array.isArray(visit.layout) ? visit.layout : {}
+const worldAvatar = () => (visit?.kind === 'admin' ? resolveAvatar(visit.avatar) : avatar.value)
 const memberPage = computed(() => islandShown.value || avatarShown.value)
 const pageStatus = computed(() => (bookPage.value === 'avatar' ? avatarStatus.value : saveStatus.value))
 const worldObjects = () =>
@@ -105,7 +106,25 @@ const zoneObject = computed(() => (entering.value || reading.value || bookOpen.v
 const showStandCard = computed(() => atStand.value && !zoneObject.value && !entering.value && !reading.value && !bookOpen.value)
 const samePath = (a: string, b: string) => new URL(a, window.location.href).pathname === new URL(b, window.location.href).pathname
 const byUrl = (url: string) => objects.value.find((object) => object.url && samePath(object.url, url)) ?? null
-const readHref = (url: string) => `${window.location.pathname}?read=${encodeURIComponent(new URL(url, window.location.href).pathname)}`
+const worldQuery = () => {
+  const params = new URLSearchParams(window.location.search)
+  const keep = new URLSearchParams()
+  for (const key of ['visit', 'island']) {
+    const value = params.get(key)
+    if (value) {
+      keep.set(key, value)
+    }
+  }
+  return keep.toString()
+}
+const worldHref = () => {
+  const query = worldQuery()
+  return query ? `${window.location.pathname}?${query}` : window.location.pathname
+}
+const readHref = (url: string) => {
+  const query = worldQuery()
+  return `${window.location.pathname}?${query ? `${query}&` : ''}read=${encodeURIComponent(new URL(url, window.location.href).pathname)}`
+}
 
 function storage(action: (store: Storage) => void) {
   try {
@@ -171,7 +190,7 @@ function exitReading(push = true) {
   reading.value = null
   entering.value = null
   if (push) {
-    window.history.pushState({}, '', window.location.pathname)
+    window.history.pushState({}, '', worldHref())
   }
 }
 
@@ -225,7 +244,7 @@ async function openBook() {
     return
   }
   if (visit) {
-    showHint('У гостьовому перегляді книга недоступна')
+    showHint(visit.kind === 'invite' ? 'У гостях книга недоступна' : 'У гостьовому перегляді книга недоступна')
     return
   }
   hint.value = ''
@@ -451,8 +470,7 @@ async function closeBook() {
   if (!scene.value.standOpen) {
     bookOpen.value = false
     if (worldDirty) {
-      worldDirty = false
-      scene.value.setObjects(worldObjects(), radius.value)
+      buildWorld()
     }
   }
 }
@@ -767,6 +785,151 @@ function onKeydown(event: KeyboardEvent) {
   }
 }
 
+const realtime = Boolean(boot.realtime) && webgl
+const PRESENCE_INTERVAL = 100
+const PRESENCE_HEARTBEAT = 3000
+const peerCount = ref(0)
+let presence: Presence | null = null
+let presenceTimer = 0
+let sentState: PeerState | null = null
+let sentAt = 0
+let pendingHostLayout: Layout | null = null
+
+const worldRoom = () => (visit ? `island:${visit.id}` : currentUser.value ? `island:${currentUser.value.id}` : 'public')
+
+function layoutKey(value: Layout) {
+  return JSON.stringify(
+    Object.keys(value)
+      .sort()
+      .map((slug) => [slug, value[slug].x, value[slug].z, value[slug].door]),
+  )
+}
+
+function buildWorld() {
+  if (!scene.value) {
+    return
+  }
+  worldDirty = false
+  scene.value.setObjects(worldObjects(), radius.value)
+  if (!presence) {
+    return
+  }
+  const room = worldRoom()
+  presence.join(room, visit?.invite ?? '')
+  if (!visit && currentUser.value) {
+    presence.sendLayout(layout.value)
+  }
+}
+
+function applyHostLayout() {
+  if (!pendingHostLayout || !scene.value || entering.value || reading.value) {
+    return
+  }
+  visitLayout = pendingHostLayout
+  pendingHostLayout = null
+  scene.value.setObjects(worldObjects(), radius.value)
+  showHint('Господар острова переставив будинки')
+}
+
+watch([entering, reading], applyHostLayout)
+
+function onHostLayout(next: Layout) {
+  if (!visit || Array.isArray(next) || layoutKey(next) === layoutKey(pendingHostLayout ?? visitLayout)) {
+    return
+  }
+  pendingHostLayout = next
+  applyHostLayout()
+}
+
+const round = (value: number) => Math.round(value * 100) / 100
+
+function pushPresence() {
+  const current = scene.value?.presence
+  if (!current || !presence) {
+    return
+  }
+  const state: PeerState = [round(current.x), round(current.z), round(current.heading), round(current.speed), current.inside]
+  const now = performance.now()
+  const previous = sentState
+  const changed =
+    !previous ||
+    Math.abs(state[0] - previous[0]) > 0.02 ||
+    Math.abs(state[1] - previous[1]) > 0.02 ||
+    Math.abs(state[2] - previous[2]) > 0.02 ||
+    state[3] !== previous[3] ||
+    state[4] !== previous[4]
+  if (changed || now - sentAt > PRESENCE_HEARTBEAT) {
+    presence.sendState(state)
+    sentState = state
+    sentAt = now
+  }
+}
+
+function startPresence() {
+  if (!realtime || presence || !scene.value) {
+    return
+  }
+  const remotes = scene.value.remotes
+  const toState = (s: PeerState) => ({ x: s[0], z: s[1], heading: s[2], speed: s[3], inside: s[4] })
+  presence = new Presence({
+    onReset: (peers) => {
+      remotes.clear()
+      for (const peer of peers) {
+        remotes.upsert(peer.id, peer.name, peer.avatar)
+        if (peer.s) {
+          remotes.setState(peer.id, toState(peer.s))
+        }
+      }
+      peerCount.value = remotes.size
+    },
+    onJoin: (peer) => {
+      remotes.upsert(peer.id, peer.name, peer.avatar)
+      peerCount.value = remotes.size
+    },
+    onLeave: (id) => {
+      remotes.remove(id)
+      peerCount.value = remotes.size
+    },
+    onState: (id, s) => remotes.setState(id, toState(s)),
+    onAvatar: (id, patch) => remotes.setAvatar(id, patch),
+    onLayout: onHostLayout,
+  })
+  presence.setAvatar(avatarDiff(avatar.value))
+  presence.join(worldRoom(), visit?.invite ?? '')
+  presenceTimer = window.setInterval(pushPresence, PRESENCE_INTERVAL)
+}
+
+watch(avatar, (next) => presence?.setAvatar(avatarDiff(next)))
+
+const inviteBusy = ref(false)
+
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    window.prompt('Скопіюйте посилання на свій острів:', text)
+    return false
+  }
+}
+
+async function shareIsland(renew: boolean) {
+  if (inviteBusy.value) {
+    return
+  }
+  inviteBusy.value = true
+  try {
+    const url = renew ? await renewInviteLink() : await inviteLink()
+    if (await copyText(url)) {
+      showHint(renew ? 'Нове посилання скопійовано, старе більше не діє' : 'Посилання на ваш острів скопійовано', 5000)
+    }
+  } catch {
+    showHint('Не вдалося створити посилання')
+  } finally {
+    inviteBusy.value = false
+  }
+}
+
 onMounted(async () => {
   // AI-NAVIGATOR-OFF onPhrase((text) => {
     // AI-NAVIGATOR-OFF if (isEcho(text) && !commands.match(text, navigatorContext.value) && !namesBuilding(text)) {
@@ -802,9 +965,10 @@ onMounted(async () => {
           // AI-NAVIGATOR-OFF announce('Далі не пройти.')
         },
         avatar: worldAvatar(),
+        spawnJitter: realtime,
       })
-      scene.value.setObjects(worldObjects(), world.island.radius)
-      worldDirty = false
+      buildWorld()
+      startPresence()
       let lastDoor: string | null = null
       storage((store) => {
         lastDoor = store.getItem(LAST_DOOR_KEY)
@@ -839,6 +1003,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('pageshow', onPageShow)
   window.removeEventListener('popstate', onPopState)
   window.clearTimeout(hintTimer)
+  window.clearInterval(presenceTimer)
+  presence?.dispose()
   scene.value?.dispose()
 })
 </script>
@@ -848,9 +1014,18 @@ onBeforeUnmount(() => {
     <div v-if="webgl" ref="stage" class="dw-stage" aria-hidden="true" />
 
     <div v-if="visit" class="dw-visit" role="status">
-      <span class="dw-visit__label">Гостьовий перегляд</span>
-      <span>Острів користувача <strong>{{ visit.name }}</strong></span>
-      <a class="dw-visit__exit" :href="visit.returnUrl">Вийти з перегляду</a>
+      <template v-if="visit.kind === 'invite'">
+        <span class="dw-visit__label">У гостях</span>
+        <span>Острів <strong>{{ visit.name }}</strong></span>
+        <span v-if="peerCount" class="dw-visit__peers">· тут ще {{ peerCount }}</span>
+        <a class="dw-visit__exit" :href="visit.returnUrl">Повернутися</a>
+      </template>
+      <template v-else>
+        <span class="dw-visit__label">Гостьовий перегляд</span>
+        <span>Острів користувача <strong>{{ visit.name }}</strong></span>
+        <span v-if="peerCount" class="dw-visit__peers">· тут ще {{ peerCount }}</span>
+        <a class="dw-visit__exit" :href="visit.returnUrl">Вийти з перегляду</a>
+      </template>
     </div>
 
     <header class="dw-topbar">
@@ -862,13 +1037,17 @@ onBeforeUnmount(() => {
         <span class="dw-brand__eyebrow">Digital World</span>
         <span class="dw-brand__name">{{ siteName }}</span>
       </div>
+      <span v-if="peerCount && !visit" class="dw-online" role="status">
+        <span class="dw-online__dot" aria-hidden="true" />
+        На острові ще {{ peerCount }}
+      </span>
     </header>
 
     <ObjectList
       v-if="objects.length"
       :objects="objects"
       :active="zone ?? (atStand ? STAND_SLUG : null)"
-      :visiting="!!visit"
+      :visiting="visit?.kind ?? null"
       :static-mode="!webgl"
       @select="(slug) => walkTo(slug)"
       @overview="scene?.overview()"
@@ -879,7 +1058,7 @@ onBeforeUnmount(() => {
         <p v-if="hint" class="dw-hint" role="status">{{ hint }}</p>
       </div>
       <DoorCard v-if="zoneObject" :object="zoneObject" :touch="touch" @enter="enter(zoneObject.slug)" />
-      <StandCard v-else-if="showStandCard" :touch="touch" :visiting="!!visit" @open="openBook" />
+      <StandCard v-else-if="showStandCard" :touch="touch" :visiting="visit?.kind ?? null" @open="openBook" />
       <!-- AI-NAVIGATOR-OFF <NavigatorChat ref="chat" :provider="aiProvider" :context="contextForNavigator" :local="runLocal" :execute="runCommand" :urgent="runUrgent" :blocked="transitionRunning" /> -->
     </div>
 
@@ -915,11 +1094,13 @@ onBeforeUnmount(() => {
       :status="pageStatus"
       :problem="bookPage === 'island' ? islandProblem : ''"
       :touch="touch"
+      :sharing="inviteBusy"
       @page="switchPage"
       @mode="setIslandMode"
       @rotate="rotateIsland"
       @reset="resetPage"
       @sign-out="signOutFromIsland"
+      @invite="shareIsland"
     >
       <AvatarEditor v-if="avatarShown && !standLayout.left" compact :avatar="avatar" @change="onAvatarChange" />
     </IslandToolbar>

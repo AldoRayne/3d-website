@@ -7,8 +7,9 @@ defineProps<{
   status: 'idle' | 'saving' | 'saved' | 'error'
   problem: string
   touch: boolean
+  sharing?: boolean
 }>()
-const emit = defineEmits<{ page: ['island' | 'avatar']; mode: ['top' | 'angled']; rotate: []; reset: []; signOut: [] }>()
+const emit = defineEmits<{ page: ['island' | 'avatar']; mode: ['top' | 'angled']; rotate: []; reset: []; signOut: []; invite: [renew: boolean] }>()
 
 const PAGES = [
   { id: 'island', title: 'Мій острів' },
@@ -52,6 +53,16 @@ const PAGES = [
       </div>
       <button type="button" class="dw-island-bar__button" :disabled="busy || !selected" @click="emit('rotate')">
         ↻ Повернути<kbd v-if="!touch">R</kbd>
+      </button>
+      <button type="button" class="dw-island-bar__button" :disabled="busy || sharing" @click="emit('invite', false)">Запросити</button>
+      <button
+        type="button"
+        class="dw-island-bar__button dw-island-bar__button--quiet"
+        :disabled="busy || sharing"
+        title="Старе посилання перестане діяти"
+        @click="emit('invite', true)"
+      >
+        Нове посилання
       </button>
     </template>
     <button type="button" class="dw-island-bar__button dw-island-bar__button--quiet" :disabled="busy" @click="emit('reset')">Скинути</button>

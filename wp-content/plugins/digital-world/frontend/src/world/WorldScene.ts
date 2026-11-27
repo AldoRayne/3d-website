@@ -16,6 +16,7 @@ import { WorldModel, type Building } from './WorldModel'
 import { STAND_READ_DISTANCE, STAND_READER_DISTANCE, STAND_SLUG } from './stand'
 import { MiniIsland } from './island'
 import { PageFigure } from './figure'
+import { RemotePlayers, type RemoteState } from './remotes'
 import type { Avatar } from './avatar'
 import type { Placement, PlacementProblem } from './WorldModel'
 
@@ -82,6 +83,7 @@ export interface WorldSceneOptions {
   onMotion?: (moving: boolean) => void
   reducedMotion?: boolean
   avatar?: Avatar
+  spawnJitter?: boolean
 }
 
 const WALK_SPEED = 5.2
@@ -186,6 +188,8 @@ export class WorldScene {
   private timeline: gsap.core.Timeline | null = null
   private moveSpeed = 0
   private shadows: boolean
+  private presenceSlug = ''
+  readonly remotes: RemotePlayers
 
   constructor(
     private container: HTMLElement,
@@ -244,7 +248,8 @@ export class WorldScene {
     if (options.avatar) {
       this.player.setAvatar(options.avatar)
     }
-    this.scene.add(this.player.root, this.marker, this.model.root)
+    this.remotes = new RemotePlayers((slug) => this.model.buildings.get(slug))
+    this.scene.add(this.player.root, this.marker, this.model.root, this.remotes.root)
 
     const canvas = this.renderer.domElement
     canvas.addEventListener('pointerdown', this.onPointerDown)
@@ -310,8 +315,25 @@ export class WorldScene {
     const reach = 26
     Object.assign(this.sun.shadow.camera, { left: -reach, right: reach, top: reach, bottom: -reach, near: 1, far: 140 })
     this.sun.shadow.camera.updateProjectionMatrix()
-    this.placeAt(this.model.spawn, this.model.spawnHeading)
+    this.placeAt(this.spawnPoint(), this.model.spawnHeading)
     this.applyHighlight()
+  }
+
+  private spawnPoint() {
+    const spawn = this.model.spawn
+    if (!this.options.spawnJitter) {
+      return spawn
+    }
+    const point = this.resolve(new THREE.Vector2(spawn.x + (Math.random() - 0.5) * 2.4, spawn.z + (Math.random() - 0.5) * 2.4))
+    return new THREE.Vector3(point.x, 0, point.y)
+  }
+
+  get presence(): RemoteState {
+    if (this.presenceSlug && (this.interior || this.reading)) {
+      return { x: 0, z: 0, heading: 0, speed: 0, inside: this.presenceSlug }
+    }
+    const { x, z } = this.player.position
+    return { x, z, heading: this.player.heading, speed: this.moveSpeed, inside: '' }
   }
 
   private placeAt(point: THREE.Vector3, heading: number) {
@@ -1331,6 +1353,7 @@ export class WorldScene {
       return Promise.resolve(false)
     }
     this.locked = true
+    this.presenceSlug = slug
     this.cancelWalk()
     this.keys.clear()
     if (this.options.reducedMotion) {
@@ -1503,6 +1526,7 @@ export class WorldScene {
     }
     if (slug && this.model.buildings.has(slug)) {
       this.placeAtDoor(slug)
+      this.presenceSlug = slug
     }
     this.cancelWalk()
     this.veil.style.opacity = '1'
@@ -2014,6 +2038,7 @@ export class WorldScene {
     this.updateZone()
     this.updateMotion()
     this.player.animate(dt, this.moveSpeed, elapsed, !!this.options.reducedMotion)
+    this.remotes.update(dt, elapsed, !!this.options.reducedMotion)
     this.figure?.update(dt, elapsed, !!this.options.reducedMotion)
     this.updateCamera(dt)
     this.updateStandLayout()
@@ -2062,6 +2087,7 @@ export class WorldScene {
     this.disposeFigure()
     this.leaveInterior()
     this.cancelWalk()
+    this.remotes.clear()
     this.resizeObserver.disconnect()
     window.removeEventListener('keydown', this.onKeyDown)
     window.removeEventListener('keyup', this.onKeyUp)

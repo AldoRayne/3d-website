@@ -83,14 +83,17 @@ export interface BootData {
   world?: WorldResponse
   auth?: AuthBoot
   visit?: VisitBoot | null
+  realtime?: boolean
 }
 
 export interface VisitBoot {
+  kind: 'admin' | 'invite'
   id: number
   name: string
   layout: Layout | []
   avatar?: AvatarPatch | []
   returnUrl: string
+  invite?: string
 }
 
 export type LayoutSide = Exclude<DoorSide, 'auto'>

@@ -2,7 +2,7 @@
 import { currentUser } from '@/auth'
 import { STAND_COLOR, STAND_TITLE } from '@/world/stand'
 
-defineProps<{ touch: boolean; visiting?: boolean }>()
+defineProps<{ touch: boolean; visiting?: 'admin' | 'invite' | null }>()
 const emit = defineEmits<{ open: [] }>()
 </script>
 
@@ -10,7 +10,7 @@ const emit = defineEmits<{ open: [] }>()
   <aside class="dw-panel" :style="{ '--dw-accent': STAND_COLOR }" aria-live="polite">
     <span class="dw-panel__type">Стенд</span>
     <h2 class="dw-panel__title">{{ STAND_TITLE }}</h2>
-    <p v-if="visiting" class="dw-panel__desc">У гостьовому перегляді книга недоступна.</p>
+    <p v-if="visiting" class="dw-panel__desc">{{ visiting === 'invite' ? 'У гостях книга недоступна.' : 'У гостьовому перегляді книга недоступна.' }}</p>
     <p v-else class="dw-panel__desc">
       {{ currentUser ? `Ви увійшли як ${currentUser.name}.` : 'Зареєструйтеся або увійдіть.' }}
     </p>

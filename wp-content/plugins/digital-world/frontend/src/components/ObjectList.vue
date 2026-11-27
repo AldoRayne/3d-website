@@ -9,7 +9,7 @@ defineProps<{
   objects: WorldObject[]
   active: string | null
   staticMode: boolean
-  visiting?: boolean
+  visiting?: 'admin' | 'invite' | null
 }>()
 
 const emit = defineEmits<{
@@ -85,7 +85,7 @@ function choose(slug: string) {
         <span class="dw-list__swatch" aria-hidden="true" />
         <span class="dw-list__text">
           <span class="dw-list__title">{{ STAND_TITLE }}</span>
-          <span class="dw-list__type">{{ visiting ? 'Гостьовий перегляд' : currentUser ? `Ви увійшли як ${currentUser.name}` : 'Реєстрація та вхід' }}</span>
+          <span class="dw-list__type">{{ visiting ? (visiting === 'invite' ? 'У гостях' : 'Гостьовий перегляд') : currentUser ? `Ви увійшли як ${currentUser.name}` : 'Реєстрація та вхід' }}</span>
         </span>
       </button>
       <button v-if="!staticMode" type="button" class="dw-list__overview" @click="emit('overview')">

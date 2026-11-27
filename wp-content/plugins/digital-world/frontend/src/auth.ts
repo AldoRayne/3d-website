@@ -73,3 +73,20 @@ export async function resetAvatar() {
   const data = await request<AvatarResponse>('/avatar', { method: 'DELETE' })
   return resolveAvatar(data.avatar)
 }
+
+interface InviteResponse {
+  url: string | null
+}
+
+export async function inviteLink() {
+  const current = await request<InviteResponse>('/invite')
+  if (current.url) {
+    return current.url
+  }
+  return renewInviteLink()
+}
+
+export async function renewInviteLink() {
+  const data = await request<InviteResponse>('/invite', { method: 'POST' })
+  return data.url as string
+}
