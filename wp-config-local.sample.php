@@ -42,3 +42,9 @@ define( 'DIGITAL_WORLD_TURNSTILE_SECRET_KEY', '1x0000000000000000000000000000000
 // Local mail catcher Mailpit (brew install mailpit): inbox at http://localhost:8025.
 define( 'DIGITAL_WORLD_SMTP_HOST', '127.0.0.1' );
 define( 'DIGITAL_WORLD_SMTP_PORT', 1025 );
+
+// Shared world: realtime/server.mjs. Empty URL or a secret under 32 chars turns it off.
+// Locally ws://localhost:8787; in production wss://SITE/dw-realtime (Apache proxies it to the Node service).
+// The same secret goes to DW_REALTIME_SECRET in realtime/.env.
+define( 'DIGITAL_WORLD_REALTIME_URL', '' );
+define( 'DIGITAL_WORLD_REALTIME_SECRET', '' );

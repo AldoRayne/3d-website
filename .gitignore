@@ -9,3 +9,5 @@
 /wp-content/plugins/digital-world/frontend/node_modules/
 
 .DS_Store
+/realtime/node_modules/
+/realtime/.env

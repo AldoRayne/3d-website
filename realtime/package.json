@@ -1,0 +1,12 @@
+{
+  "name": "digital-world-realtime",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node --env-file=.env server.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
+  }
+}
