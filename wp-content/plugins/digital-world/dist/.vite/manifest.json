@@ -1,13 +1,13 @@
 {
-  "_AvatarEditor-D0jsMmee.js": {
-    "file": "assets/AvatarEditor-D0jsMmee.js",
+  "_AvatarEditor-DMeEyIz7.js": {
+    "file": "assets/AvatarEditor-DMeEyIz7.js",
     "name": "AvatarEditor",
     "imports": [
-      "_WorldModel-BLwxzqC6.js"
+      "_WorldModel-CREGUD-m.js"
     ]
   },
-  "_WorldModel-BLwxzqC6.js": {
-    "file": "assets/WorldModel-BLwxzqC6.js",
+  "_WorldModel-CREGUD-m.js": {
+    "file": "assets/WorldModel-CREGUD-m.js",
     "name": "WorldModel",
     "imports": [
       "_buildings-Cn1pCzGo.js"
@@ -20,11 +20,11 @@
     "file": "assets/buildings-Cn1pCzGo.js",
     "name": "buildings"
   },
-  "_editor-DOZo8RQ9.js": {
-    "file": "assets/editor-DOZo8RQ9.js",
+  "_editor-DD1MMR9Q.js": {
+    "file": "assets/editor-DD1MMR9Q.js",
     "name": "editor",
     "imports": [
-      "_WorldModel-BLwxzqC6.js"
+      "_WorldModel-CREGUD-m.js"
     ],
     "css": [
       "assets/editor-DQnJkZiG.css"
@@ -45,15 +45,15 @@
     "isDynamicEntry": true
   },
   "src/admin.ts": {
-    "file": "assets/admin-B6_e6I23.js",
+    "file": "assets/admin-DeSg1N8P.js",
     "name": "admin",
     "src": "src/admin.ts",
     "isEntry": true,
     "imports": [
-      "_WorldModel-BLwxzqC6.js",
+      "_WorldModel-CREGUD-m.js",
       "_buildings-Cn1pCzGo.js",
       "_preview-CDxcuptg.js",
-      "_editor-DOZo8RQ9.js"
+      "_editor-DD1MMR9Q.js"
     ]
   },
   "src/assets/fonts/manrope-300.json": {
@@ -82,27 +82,27 @@
     ]
   },
   "src/island-preview.ts": {
-    "file": "assets/island-DN8vO9a0.js",
+    "file": "assets/island-DgAFAAIi.js",
     "name": "island",
     "src": "src/island-preview.ts",
     "isEntry": true,
     "imports": [
-      "_WorldModel-BLwxzqC6.js",
-      "_AvatarEditor-D0jsMmee.js",
-      "_editor-DOZo8RQ9.js"
+      "_WorldModel-CREGUD-m.js",
+      "_AvatarEditor-DMeEyIz7.js",
+      "_editor-DD1MMR9Q.js"
     ],
     "css": [
       "assets/island-C8paxQhw.css"
     ]
   },
   "src/main.ts": {
-    "file": "assets/main-DQ1ghgac.js",
+    "file": "assets/main-CD3zq9dy.js",
     "name": "main",
     "src": "src/main.ts",
     "isEntry": true,
     "imports": [
-      "_WorldModel-BLwxzqC6.js",
-      "_AvatarEditor-D0jsMmee.js",
+      "_WorldModel-CREGUD-m.js",
+      "_AvatarEditor-DMeEyIz7.js",
       "_buildings-Cn1pCzGo.js"
     ],
     "css": [
