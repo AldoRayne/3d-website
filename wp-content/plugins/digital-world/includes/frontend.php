@@ -48,7 +48,8 @@ function digital_world_boot_data() {
 		// AI-NAVIGATOR-OFF 'ai'       => digital_world_ai_provider(),
 		'world'    => digital_world_world_payload(),
 		'auth'     => digital_world_auth_boot_data(),
-		'visit'    => digital_world_visit_boot(),
+		'visit'    => digital_world_visit_boot() ?? digital_world_invite_boot(),
+		'realtime' => digital_world_realtime_enabled(),
 	);
 }
 

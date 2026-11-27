@@ -110,6 +110,7 @@ function digital_world_visit_boot() {
 		return null;
 	}
 	return array(
+		'kind'      => 'admin',
 		'id'        => $user->ID,
 		'name'      => $user->display_name,
 		'layout'    => (object) digital_world_user_layout( $user->ID ),
